@@ -460,10 +460,10 @@ function performAttackOn(targetId){
 // --- DROP-IN REPLACEMENT ---
 let __aiTimer = null;
 
-// Call this anywhere; it safely retries until the AI can act.
+let __aiTimer = null;
 function maybeRunAI() {
-  // 1) Must be P2's turn and AI enabled
-  const aiOn = $("aiToggle") ? $("aiToggle").checked : true;  // default ON if the toggle is absent
+  // 1) Must be P2's turn and AI enabled (default ON if no toggle in DOM)
+  const aiOn = $("aiToggle") ? $("aiToggle").checked : true;
   if (!aiOn) return;
   if (state.turn !== 1) return;
 
@@ -492,8 +492,7 @@ function maybeRunAI() {
       else                      aiNormal();
     } catch (e) {
       console.error("AI error:", e);
-      // fail-safe: don't brick the game turn
-      endTurn();
+      endTurn(); // fail-safe
     }
   }, 160);
 }
