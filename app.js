@@ -456,20 +456,37 @@ function performAttackOn(targetId){
 }
 
 /* ===== AI (Player 2) with difficulty ===== */
-function maybeRunAI(){
-  const aiOn = $("aiToggle").checked;
-  if(!aiOn) return;
-  if(state.turn!==1) return;
-  setTimeout(aiTakeTurn, 180);
-}
-function aiTakeTurn(){
-  if($("btnEndTurn").disabled) return;
-  if(state.turnActionUsed){ endTurn(); return; }
+// Replace your maybeRunAI with this version
+let __aiTimer = null;
+function maybeRunAI() {
+  // 1) Is AI enabled and is it Player 2's turn?
+  const aiOn = $("aiToggle") ? $("aiToggle").checked : true; // default-on if control missing
+  if (!aiOn) return;
+  if (state.turn !== 1) return;
 
-  const diff = $("aiDifficulty").value;
-  if(diff==="easy") return aiEasy();
-  if(diff==="hard") return aiHard();
-  return aiNormal();
+  // 2) If AI already used its action this turn, end the turn shortly.
+  if (state.turnActionUsed) {
+    if (__aiTimer) clearTimeout(__aiTimer);
+    __aiTimer = setTimeout(() => { endTurn(); }, 140);
+    return;
+  }
+
+  // 3) Only act from a clean "idle" phase; otherwise poll until idle.
+  if (state.phase !== "idle") {
+    if (__aiTimer) clearTimeout(__aiTimer);
+    __aiTimer = setTimeout(maybeRunAI, 120);
+    return;
+  }
+
+  // 4) Debounced invoke of the selected difficulty.
+  if (__aiTimer) clearTimeout(__aiTimer);
+  __aiTimer = setTimeout(() => {
+    const diffSel = $("aiDifficulty");
+    const diff = diffSel ? diffSel.value : "normal";
+    if (diff === "easy")      aiEasy();
+    else if (diff === "hard") aiHard();
+    else                      aiNormal();
+  }, 180);
 }
 
 function aiEasy(){
