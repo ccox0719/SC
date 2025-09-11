@@ -32,7 +32,19 @@ const state = {
 
 /* ================= DOM Shortcuts ================= */
 const $ = (id)=>document.getElementById(id);
+// Ensure the Confirm Launch button exists and is wired
+function ensureConfirmLaunchButton(){
+  let btn = $("btnConfirmLaunch");
+  if (!btn) return; // in this HTML we include it, so this is just defensive
+  btn.style.display = (state.phase === "launch_pair") ? "inline-block" : "none";
+  btn.onclick = ()=>confirmLaunch();
+}
 
+// Create no elements here because the HTML already provides them,
+// but expose a guard to (re)wire dynamic things when needed.
+function guardDOM(){
+  ensureConfirmLaunchButton();
+}
 /* ================= History / Undo ================= */
 function snapshot(){
   state.history.push(deep({
@@ -849,8 +861,26 @@ function wire(){
 }
 
 /* ================= Start (after DOM is ready) ================= */
+/* ================= Wiring ================= */
+function wire(){
+  const w = [
+    ["btnBuild", ()=>beginBuild()],
+    ["btnAttack", ()=>beginAttack()],
+    ["btnCrown",  ()=>beginCrown()],
+    ["btnUndo",   ()=>undo()],
+    ["btnEndTurn",()=>endTurn()],
+    ["btnNewGame",()=>initGame()],
+    ["btnConfirmLaunch",()=>confirmLaunch()],
+  ];
+  w.forEach(([id,fn])=>{ const el=$(id); if(el) el.addEventListener("click", fn); });
+
+  const _aiTgl = $("aiToggle");
+  if (_aiTgl) _aiTgl.addEventListener("change", () => runAIIfNeeded());
+}
+
+/* ================= Start (after DOM is ready) ================= */
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => { wire(); initGame(); });
+  document.addEventListener("DOMContentLoaded", () => { guardDOM(); wire(); initGame(); });
 } else {
-  wire(); initGame();
+  guardDOM(); wire(); initGame();
 }
