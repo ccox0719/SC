@@ -22,8 +22,9 @@ const state = {
   ],
   turn: 0,
   log: [],
-  phase: "idle", // build_select_card/build_select_ship/attack_select_attacker/attack_select_target/crown_select_ship/special_target/launch_pair
-  pending: null,
+  // Phases: idle | build_pick | build_target | launch_pair | attack_select_attacker | attack_select_target | crown_select_ship | special_target
+  phase: "idle",
+  pending: null,    // varies per phase (see beginBuild/handleBuildSelectCard)
   history: [],
   turnActionUsed: false,
   maxFleet: 3
@@ -38,7 +39,7 @@ function snapshot(){
     deck:state.deck, players:state.players, turn:state.turn, phase:state.phase, pending:state.pending,
     log:state.log, turnActionUsed:state.turnActionUsed
   }));
-  if(state.history.length>60) state.history.shift();
+  if(state.history.length>80) state.history.shift();
 }
 function undo(){
   const snap = state.history.pop(); if(!snap) return;
@@ -113,6 +114,7 @@ function startOfOwnerTurnMaintenance(p){
 function initGame(){
   state.deck = makeDeck();
 
+  // starters
   state.players[0].ships = [
     {id:"p1a", name:"P1 Ship A", engine:3, hull:2, shieldRating:2, shieldActive:true, shieldCooldown:0, weapons:[], weaponsInactiveTurns:0, alive:true, flagship:false, reflect:false},
     {id:"p1b", name:"P1 Ship B", engine:4, hull:5, shieldRating:0, shieldActive:false, shieldCooldown:0, weapons:[], weaponsInactiveTurns:0, alive:true, flagship:false, reflect:false}
@@ -122,11 +124,12 @@ function initGame(){
     {id:"p2b", name:"P2 Ship B", engine:5, hull:4, shieldRating:0, shieldActive:false, shieldCooldown:0, weapons:[], weaponsInactiveTurns:0, alive:true, flagship:false, reflect:false}
   ];
 
+  // hands P1:7, P2:6 (Ace guaranteed)
   state.players[0].hand = state.deck.splice(-7); guaranteeAce(state.players[0].hand, state.deck);
   state.players[1].hand = state.deck.splice(-6); guaranteeAce(state.players[1].hand, state.deck);
 
   state.turn = 0;
-  state.players[0].drewTwo = true;
+  state.players[0].drewTwo = true;  // P2 will draw 2 on their first turn
   state.players[1].drewTwo = false;
 
   state.log = [];
@@ -198,9 +201,9 @@ function markActionUsed(){ state.turnActionUsed = true; }
 /* ================= Action Logic ================= */
 function beginBuild(){
   if(actionGate()) return;
-  state.phase="build_select_card";
-  state.pending={type:"build", selectedCards:[], card:null};
-  setHint("Build: select a card (♣ Engine, ♥ Hull, ♦ Shield, ♠ Weapon ≤ Engine). Pick ♣+♥ to launch a NEW ship.");
+  state.phase="build_pick";
+  state.pending={type:"build", firstIdx:null, selectedIdx:null, pairIdx:null};
+  setHint("Build: tap a card (♣ Engine, ♥ Hull, ♦ Shield, ♠ Weapon ≤ Engine). Tap ♣ then ♥ (or vice versa) to LAUNCH a new ship.");
   render();
 }
 function beginAttack(){ if(actionGate()) return; state.phase="attack_select_attacker"; state.pending={type:"attack"}; setHint("Attack: select your attacking ship (must have weapons)."); render(); }
@@ -226,13 +229,13 @@ function applyCrown(shipId){
 function me(){ return state.players[state.turn]; }
 function opp(){ return state.players[1-state.turn]; }
 
-/* ===== Build selection & launch pair (FIXED highlighting & install) ===== */
+/* ===== Build selection & launch pair (robust) ===== */
 function handleBuildSelectCard(cardIdx){
   const p = me();
   const card = p.hand[cardIdx];
   if(!card) return;
 
-  // specials / joker
+  // Specials / Joker → target phase
   if(card.suit==="JOKER" || (card.suit==="S" && [11,12,13].includes(card.rank))){
     state.phase="special_target"; state.pending={type:"special", cardIdx, card};
     if(card.suit==="JOKER") setHint("Joker: select an enemy ship with weapons (they go inactive for 1 turn).");
@@ -243,79 +246,88 @@ function handleBuildSelectCard(cardIdx){
     return;
   }
 
-  // build pair flow — ALWAYS set pending.card for highlighting/install-on-ship
-  if(state.pending?.type==="build"){
-    const sel = state.pending.selectedCards;
+  // Build flow
+  if(state.phase!=="build_pick" && state.phase!=="build_target"){ 
+    // if user clicks a card while not in build, start build
+    beginBuild();
+  }
 
-    if(sel.length===0){
-      sel.push(cardIdx);
-      state.pending.card = card;           // <-- key: enables highlights right away
-      state.phase = "build_select_card";   // stay in this phase but ships will glow
-      const want = card.suit==="C" ? "♥" : (card.suit==="H" ? "♣" : "♣ or ♥");
-      setHint(`Selected ${lbl(card)}. Click a highlighted ship to install, or pick ${want} to LAUNCH a new ship.`);
+  // If first of a pair (♣ or ♥)
+  if(card.suit==="C" || card.suit==="H"){
+    if(state.pending.firstIdx===null){
+      state.pending.firstIdx = cardIdx;
+      state.pending.selectedIdx = cardIdx;   // allow single-card install too
+      state.phase = "build_target";
+      const need = (card.suit==="C") ? "♥" : "♣";
+      setHint(`Selected ${lbl(card)}. Tap a highlighted ship to install, or select a ${need} to LAUNCH a new ship.`);
       render();
       return;
-    }
-
-    if(sel.length===1){
-      const first = p.hand[sel[0]];
+    }else{
+      // We already have a first; check if complementary
+      const first = p.hand[state.pending.firstIdx];
       const suits = [first.suit, card.suit].sort().join("");
-      if(suits==="CH"){ // valid pair -> launch
-        state.pending.selectedCards = [sel[0], cardIdx];
-        state.pending.card = null;         // installing single card no longer active
+      if(suits==="CH" && cardIdx!==state.pending.firstIdx){
+        state.pending.pairIdx = cardIdx;
+        state.pending.selectedIdx = null;
         state.phase = "launch_pair";
-        setHint("Launch ready: press Confirm Launch (or click your side to confirm).");
+        setHint("Launch ready: press **Confirm Launch**.");
         render();
         return;
       }else{
-        // replace the first pick and keep single-card mode
-        state.pending.selectedCards = [cardIdx];
-        state.pending.card = card;
-        const want2 = card.suit==="C" ? "♥" : (card.suit==="H" ? "♣" : "♣ or ♥");
-        setHint(`Selected ${lbl(card)}. Click a highlighted ship to install, or pick ${want2} to LAUNCH a new ship.`);
+        // Not complementary → treat this as the new single selection
+        state.pending.firstIdx = cardIdx;
+        state.pending.selectedIdx = cardIdx;
+        state.pending.pairIdx = null;
+        state.phase = "build_target";
+        const need = (card.suit==="C") ? "♥" : "♣";
+        setHint(`Selected ${lbl(card)}. Tap a highlighted ship to install, or select a ${need} to LAUNCH a new ship.`);
         render();
         return;
       }
     }
   }
 
-  // Safety: direct single-card route
-  state.phase="build_select_ship"; state.pending={type:"build", cardIdx, card, selectedCards:[cardIdx]};
-  setHint(`Build: select a highlighted ship to apply ${lbl(card)}.`);
+  // For ♦ or normal ♠ (2–10): just go to target
+  state.pending.selectedIdx = cardIdx;
+  state.phase = "build_target";
+
+  // Compute if any valid targets exist
+  const targets = eligibleBuildTargets(me(), card);
+  if(targets.length===0){
+    if(card.suit==="S"){
+      const maxE = Math.max(...me().ships.filter(s=>s.alive).map(s=>s.engine));
+      setHint(`No valid targets for ${lbl(card)}. Highest Engine is ${maxE}. Upgrade ♣ first or pick another card.`);
+    }else{
+      setHint(`No valid targets: build only on your living ships.`);
+    }
+  }else{
+    setHint(`Build: tap a **highlighted** ship to install ${lbl(card)}.`);
+  }
   render();
+}
+
+function eligibleBuildTargets(player, card){
+  return player.ships.filter(s=> canApplyCardToShip(card, s, player.id) );
 }
 
 function canApplyCardToShip(card, ship, ownerId){
   if(!ship.alive) return false;
-  // Accept highlighting from either single-card modes
-  const inSingle = (state.phase==="build_select_ship" || state.phase==="build_select_card") && !!card;
-  if(inSingle){
-    if(me().id!==ownerId) return false; // own ships only
-    if(card.suit==="C") return true;
-    if(card.suit==="H") return true;
-    if(card.suit==="D") return true;
-    if(card.suit==="S" && card.rank>=2 && card.rank<=10) return card.rank <= ship.engine;
-    return false;
-  }
-  if(state.phase==="special_target"){
-    const mine = ownerId===me().id;
-    if(card.suit==="JOKER"){ return !mine && ship.alive && (ship.weapons.length>0); }
-    if(card.suit==="S" && card.rank===11){ return !mine && ship.alive; }
-    if(card.suit==="S" && card.rank===12){ return mine && ship.alive; }
-    if(card.suit==="S" && card.rank===13){ return !mine && ship.alive; }
-  }
-  // launch_pair: highlighting is not on ships (confirm button instead)
+  if(ownerId!==me().id) return false; // own ships only during your turn
+  if(card.suit==="C") return true;
+  if(card.suit==="H") return true;
+  if(card.suit==="D") return true; // set/refresh shield (reactivates)
+  if(card.suit==="S" && card.rank>=2 && card.rank<=10) return card.rank <= ship.engine;
   return false;
 }
 
 function confirmLaunch(){
   const p = me();
   const pend = state.pending;
-  if(state.phase!=="launch_pair" || !pend?.selectedCards || pend.selectedCards.length!==2) return;
+  if(state.phase!=="launch_pair" || !Number.isInteger(pend?.firstIdx) || !Number.isInteger(pend?.pairIdx)) return;
 
   snapshot();
 
-  const [a,b] = pend.selectedCards;
+  const a = pend.firstIdx, b = pend.pairIdx;
   const cA = p.hand[a], cB = p.hand[b];
   const club = (cA.suit==="C") ? cA : cB;
   const heart = (cB.suit==="H") ? cB : cA;
@@ -342,23 +354,22 @@ function confirmLaunch(){
 }
 
 function applyBuildToShip(shipId){
-  // Allow: build_select_ship OR build_select_card (single-card) OR launch_pair (we redirect)
   if(state.phase==="launch_pair"){ confirmLaunch(); return; }
+  if(state.phase!=="build_target" || state.pending?.selectedIdx==null) return;
 
   snapshot();
-  const p = me(); const pend = state.pending; if(!pend) return;
 
-  // pick which single card is active
-  let cardIdx = pend.cardIdx;
-  let card = pend.card;
-  if(card==null && pend.selectedCards && pend.selectedCards.length===1){
-    cardIdx = pend.selectedCards[0];
-    card = p.hand[cardIdx];
+  const p = me(); 
+  const cardIdx = state.pending.selectedIdx;
+  const card = p.hand[cardIdx];
+  const ship = p.ships.find(s=>s.id===shipId);
+  if(!card || !ship){ state.history.pop(); return; }
+
+  if(!canApplyCardToShip(card, ship, p.id)){
+    setHint("That card can't be installed on that ship.");
+    state.history.pop();
+    return;
   }
-  if(!card){ state.history.pop(); return; }
-
-  const ship = p.ships.find(s=>s.id===shipId); if(!ship) { state.history.pop(); return; }
-  if(me().id!==state.turn){ state.history.pop(); return; }
 
   if(card.suit==="C"){ ship.engine=Math.max(ship.engine, card.rank); p.hand.splice(cardIdx,1); log(`${p.name} upgrades Engine on ${ship.name} → ${ship.engine}.`); }
   else if(card.suit==="H"){ ship.hull+=card.rank; p.hand.splice(cardIdx,1); log(`${p.name} adds ${card.rank} Hull to ${ship.name}.`); }
@@ -368,13 +379,10 @@ function applyBuildToShip(shipId){
     p.hand.splice(cardIdx,1);
     log(`${p.name} sets Shield ${ship.shieldRating} on ${ship.name} (active).`);
   }
-  else if(card.suit==="S" && card.rank>=2 && card.rank<=10){
-    if(card.rank>ship.engine){ setHint(`Engine ${ship.engine} too low for weapon ${card.rank}.`); state.history.pop(); return; }
+  else if(card.suit==="S"){
     ship.weapons.push(card.rank);
     p.hand.splice(cardIdx,1);
     log(`${p.name} installs weapon ${card.rank}♠ on ${ship.name}.`);
-  }else{
-    state.history.pop(); return;
   }
 
   state.phase="idle"; state.pending=null; markActionUsed(); render(); maybeRunAI();
@@ -482,10 +490,18 @@ function aiEasy(){
   if(sp.length) choices.push(()=>{
     const c = sp[Math.floor(Math.random()*sp.length)];
     const fit = p.ships.find(s=>s.alive && c.rank<=s.engine) || p.ships[0];
-    state.phase="build_select_ship"; state.pending={type:"build",cardIdx:p.hand.indexOf(c),card:c,selectedCards:[p.hand.indexOf(c)]}; applyBuildToShip(fit.id);
+    // use the new build flow
+    state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+    handleBuildSelectCard(p.hand.indexOf(c)); // moves to build_target
+    applyBuildToShip(fit.id);
   });
   const club = p.hand.find(c=>c.suit==="C"), heart = p.hand.find(c=>c.suit==="H");
-  if(club && heart) choices.push(()=>{ state.pending={type:"build",selectedCards:[p.hand.indexOf(club), p.hand.indexOf(heart)]}; state.phase="launch_pair"; confirmLaunch(); });
+  if(club && heart) choices.push(()=>{
+    state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+    handleBuildSelectCard(p.hand.indexOf(club));
+    handleBuildSelectCard(p.hand.indexOf(heart));
+    confirmLaunch();
+  });
   const atk = p.ships.find(s=>s.alive && shipDamage(s)>0);
   const tar = opp().ships.find(s=>s.alive);
   if(atk && tar) choices.push(()=>{ state.phase="attack_select_target"; state.pending={type:"attack",attackerId:atk.id}; performAttackOn(tar.id); });
@@ -512,30 +528,41 @@ function aiNormal(){
   const sp = p.hand.filter(c=>c.suit==="S" && c.rank>=2 && c.rank<=10).sort((a,b)=>a.rank-b.rank)[0];
   if(sp){
     const fit = p.ships.filter(s=>s.alive && sp.rank<=s.engine).sort((a,b)=>shipDamage(a)-shipDamage(b))[0];
-    if(fit){ state.phase="build_select_ship"; state.pending={type:"build",cardIdx:p.hand.indexOf(sp),card:sp,selectedCards:[p.hand.indexOf(sp)]}; applyBuildToShip(fit.id); return; }
+    if(fit){
+      state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+      handleBuildSelectCard(p.hand.indexOf(sp)); applyBuildToShip(fit.id); return;
+    }
   }
   const club = p.hand.find(c=>c.suit==="C"), heart = p.hand.find(c=>c.suit==="H");
   if(club && heart){
     const aliveCount = p.ships.filter(s=>s.alive).length;
     if(aliveCount < state.maxFleet || p.ships.some(s=>!s.alive)){
-      state.pending={type:"build",selectedCards:[p.hand.indexOf(club), p.hand.indexOf(heart)]}; state.phase="launch_pair"; confirmLaunch(); return;
+      state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+      handleBuildSelectCard(p.hand.indexOf(club));
+      handleBuildSelectCard(p.hand.indexOf(heart));
+      confirmLaunch(); return;
     }
   }
   if(sp){
     const need = sp.rank;
     const clubUp = p.hand.filter(c=>c.suit==="C").sort((a,b)=>b.rank-a.rank)[0];
     const tgt = p.ships.filter(s=>s.alive).sort((a,b)=>a.engine-b.engine)[0];
-    if(clubUp && tgt && tgt.engine<need){ state.phase="build_select_ship"; state.pending={type:"build",cardIdx:p.hand.indexOf(clubUp),card:clubUp,selectedCards:[p.hand.indexOf(clubUp)]}; applyBuildToShip(tgt.id); return; }
+    if(clubUp && tgt && tgt.engine<need){
+      state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+      handleBuildSelectCard(p.hand.indexOf(clubUp)); applyBuildToShip(tgt.id); return;
+    }
   }
   const heartUp = p.hand.filter(c=>c.suit==="H").sort((a,b)=>a.rank-b.rank)[0];
   if(heartUp){
     const s = p.ships.filter(s=>s.alive).sort((a,b)=>(a.hull+(a.shieldActive?a.shieldRating:0))-(b.hull+(b.shieldActive?b.shieldRating:0)))[0];
-    state.phase="build_select_ship"; state.pending={type:"build",cardIdx:p.hand.indexOf(heartUp),card:heartUp,selectedCards:[p.hand.indexOf(heartUp)]}; applyBuildToShip(s.id); return;
+    state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+    handleBuildSelectCard(p.hand.indexOf(heartUp)); applyBuildToShip(s.id); return;
   }
   const diam = p.hand.filter(c=>c.suit==="D").sort((a,b)=>b.rank-a.rank)[0];
   if(diam){
     const s = p.ships.filter(s=>s.alive).sort((a,b)=>(a.shieldRating - b.shieldRating))[0];
-    state.phase="build_select_ship"; state.pending={type:"build",cardIdx:p.hand.indexOf(diam),card:diam,selectedCards:[p.hand.indexOf(diam)]}; applyBuildToShip(s.id); return;
+    state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+    handleBuildSelectCard(p.hand.indexOf(diam)); applyBuildToShip(s.id); return;
   }
   const jok = p.hand.findIndex(c=>c.suit==="JOKER");
   const gun = opp().ships.filter(s=>s.alive && shipDamage(s)>0).sort((a,b)=>shipDamage(b)-shipDamage(a))[0];
@@ -576,19 +603,30 @@ function aiHard(){
   const sp = p.hand.filter(c=>c.suit==="S" && c.rank>=2 && c.rank<=10).sort((a,b)=>a.rank-b.rank)[0];
   if(sp){
     const fit = p.ships.filter(s=>s.alive && sp.rank<=s.engine).sort((a,b)=>shipDamage(a)-shipDamage(b))[0];
-    if(fit){ state.phase="build_select_ship"; state.pending={type:"build",cardIdx:p.hand.indexOf(sp),card:sp,selectedCards:[p.hand.indexOf(sp)]}; applyBuildToShip(fit.id); return; }
+    if(fit){
+      state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+      handleBuildSelectCard(p.hand.indexOf(sp)); applyBuildToShip(fit.id); return;
+    }
   }
   if(sp){
     const need = sp.rank;
     const clubUp = p.hand.filter(c=>c.suit==="C").sort((a,b)=>b.rank-a.rank)[0];
     const tgt = p.ships.filter(s=>s.alive).sort((a,b)=>a.engine-b.engine)[0];
-    if(clubUp && tgt && tgt.engine<need){ state.phase="build_select_ship"; state.pending={type:"build",cardIdx:p.hand.indexOf(clubUp),card:clubUp,selectedCards:[p.hand.indexOf(clubUp)]}; applyBuildToShip(tgt.id); return; }
+    if(clubUp && tgt && tgt.engine<need){
+      state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+      handleBuildSelectCard(p.hand.indexOf(clubUp)); applyBuildToShip(tgt.id); return;
+    }
   }
   const club = p.hand.find(c=>c.suit==="C"), heart = p.hand.find(c=>c.suit==="H");
   if(club && heart){
     const aliveCount = p.ships.filter(s=>s.alive).length;
     const canLaunch = (aliveCount < state.maxFleet) || p.ships.some(s=>!s.alive);
-    if(canLaunch){ state.pending={type:"build",selectedCards:[p.hand.indexOf(club), p.hand.indexOf(heart)]}; state.phase="launch_pair"; confirmLaunch(); return; }
+    if(canLaunch){
+      state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+      handleBuildSelectCard(p.hand.indexOf(club));
+      handleBuildSelectCard(p.hand.indexOf(heart));
+      confirmLaunch(); return;
+    }
   }
   const heartUp = p.hand.filter(c=>c.suit==="H").sort((a,b)=>a.rank-b.rank)[0];
   if(heartUp){
@@ -597,12 +635,14 @@ function aiHard(){
       const B = (b.hull + (b.shieldActive?b.shieldRating:0));
       return A-B;
     })[0];
-    state.phase="build_select_ship"; state.pending={type:"build",cardIdx:p.hand.indexOf(heartUp),card:heartUp,selectedCards:[p.hand.indexOf(heartUp)]}; applyBuildToShip(s.id); return;
+    state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+    handleBuildSelectCard(p.hand.indexOf(heartUp)); applyBuildToShip(s.id); return;
   }
-  const diam = p.hand.filter(c=>c.suit==="D").sort((a,b)=>b.rank-a-rank)[0];
+  const diam = p.hand.filter(c=>c.suit==="D").sort((a,b)=>b.rank-a.rank)[0];
   if(diam){
     const s = p.ships.filter(s=>s.alive).sort((a,b)=>a.shieldRating - b.shieldRating)[0];
-    state.phase="build_select_ship"; state.pending={type:"build",cardIdx:p.hand.indexOf(diam),card:diam,selectedCards:[p.hand.indexOf(diam)]}; applyBuildToShip(s.id); return;
+    state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
+    handleBuildSelectCard(p.hand.indexOf(diam)); applyBuildToShip(s.id); return;
   }
   const jok = p.hand.findIndex(c=>c.suit==="JOKER");
   const gun = opp().ships.filter(s=>s.alive && shipDamage(s)>0)
@@ -671,9 +711,7 @@ function render(){
       `;
       d.addEventListener("click", ()=>{
         const phase = state.phase;
-        if(phase==="build_select_ship" || phase==="build_select_card"){ // <-- allow install in both
-          if(p.id===me().id) applyBuildToShip(s.id);
-        }
+        if((phase==="build_target") && p.id===me().id){ applyBuildToShip(s.id); }
         else if(phase==="attack_select_attacker" && p.id===me().id){ selectAttacker(s.id); }
         else if(phase==="attack_select_target" && p.id===opp().id){ performAttackOn(s.id); }
         else if(phase==="crown_select_ship" && p.id===me().id){ applyCrown(s.id); }
@@ -690,16 +728,18 @@ function render(){
   // Hand
   const hand = $("hand"); hand.innerHTML="";
   const p = me();
-  const selSet = (state.pending?.type==="build" && state.pending.selectedCards) ? new Set(state.pending.selectedCards) : new Set();
 
   p.hand.forEach((c,idx)=>{
     const el=document.createElement("div"); el.className="card "+({C:"c",H:"h",D:"d",S:"s"}[c.suit]||"");
     el.textContent=lbl(c);
-    if(selSet.has(idx)) el.classList.add("sel");
-    // only disable when target-selecting or launching; keep clickable in build_select_card for reselect
-    if(state.phase==="build_select_ship" || state.phase==="special_target" || state.phase==="launch_pair") el.classList.add("disabled");
+
+    // Highlight the chosen card during build_target
+    if(state.phase==="build_target" && state.pending?.selectedIdx===idx) el.classList.add("sel");
+    // While launching, disable hand (except maybe undo)
+    if(state.phase==="special_target" || state.phase==="launch_pair") el.classList.add("disabled");
+
     el.addEventListener("click", ()=>{
-      if(state.phase==="build_select_card"){ handleBuildSelectCard(idx); }
+      if(state.phase==="build_pick" || state.phase==="build_target"){ handleBuildSelectCard(idx); }
       else { setSelected(`Card • ${lbl(c)}`); }
     });
     hand.appendChild(el);
@@ -707,10 +747,9 @@ function render(){
 
   const used = state.turnActionUsed;
   const launching = (state.phase==="launch_pair");
-  const buildMidFlow = (state.phase==="build_select_card" || state.phase==="build_select_ship" || state.phase==="launch_pair");
 
   $("btnConfirmLaunch").style.display = launching ? "inline-block" : "none";
-  $("btnBuild").disabled  = used || (!["idle","build_select_card","build_select_ship","launch_pair"].includes(state.phase));
+  $("btnBuild").disabled  = used || (!["idle","build_pick","build_target","launch_pair"].includes(state.phase));
   $("btnAttack").disabled = used || (state.phase!=="idle");
   $("btnCrown").disabled  = used || (state.phase!=="idle");
   $("onceNote").classList.toggle("used", used);
@@ -723,9 +762,9 @@ function computeShipHighlights(ownerId){
   const map = {};
   const phase = state.phase, pend=state.pending;
 
-  // NEW: highlight in build_select_card using pend.card (single-card install)
-  if((phase==="build_select_ship" || phase==="build_select_card") && (pend?.card || (pend?.selectedCards?.length===1))){
-    const card = pend.card || (me().hand[pend.selectedCards[0]]);
+  // Highlight own ships for single-card installs (build_target)
+  if(phase==="build_target" && pend?.selectedIdx!=null && ownerId===me().id){
+    const card = me().hand[pend.selectedIdx];
     if(card){
       for(const s of state.players[ownerId].ships){
         if(canApplyCardToShip(card, s, ownerId)) map[s.id]=true;
@@ -744,7 +783,12 @@ function computeShipHighlights(ownerId){
   }
   if(phase==="special_target" && pend?.card){
     for(const s of state.players[ownerId].ships){
-      if(canApplyCardToShip(pend.card, s, ownerId)) map[s.id]=true;
+      if(ownerId===me().id && pend.card.rank===12 && pend.card.suit==="S"){ // Q♠ reflect → my side only
+        if(s.alive) map[s.id]=true;
+      }
+      if(ownerId===opp().id && pend.card.suit!=="JOKER" ? pend.card.rank!==12 : true){
+        if(s.alive) map[s.id]=true; // J/K/Joker target any enemy alive (Joker requires weapons check on click)
+      }
     }
   }
   return map;
