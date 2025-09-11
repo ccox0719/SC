@@ -232,6 +232,39 @@ function beginCrown(){
   state.phase="crown_select_ship"; state.pending={type:"crown", cardIdx:idx};
   setHint("Select a ship to crown (Engine becomes at least 5)."); render();
 }
+function confirmLaunch(){
+  const p = me();
+  const pend = state.pending;
+  if(state.phase!=="launch_pair" || !pend?.selectedCards || pend.selectedCards.length!==2) return;
+
+  snapshot();
+
+  const [a,b] = pend.selectedCards;
+  const cA = p.hand[a], cB = p.hand[b];
+  const club = (cA.suit==="C") ? cA : cB;
+  const heart = (cB.suit==="H") ? cB : cA;
+  if(!(club && heart)){ state.history.pop(); return; }
+
+  const aliveCount = p.ships.filter(s=>s.alive).length;
+  if(aliveCount >= state.maxFleet && !p.ships.some(s=>!s.alive)){
+    setHint(`Fleet is full (cap ${state.maxFleet}). Destroy a ship first or install instead.`);
+    state.history.pop(); return;
+  }
+
+  const nid = `${p.id===0?"p1":"p2"}n${Date.now()%100000}`;
+  const newShip = {
+    id:nid, name:`${p.name} New Ship`, engine:club.rank, hull:heart.rank,
+    shieldRating:0, shieldActive:false, shieldCooldown:0,
+    weapons:[], weaponsInactiveTurns:0, alive:true, flagship:false, reflect:false
+  };
+  p.ships.push(newShip);
+
+  // remove the two cards (highest index first)
+  [a,b].sort((x,y)=>y-x).forEach(i=>p.hand.splice(i,1));
+
+  log(`${p.name} launches a new ship (E:${club.rank} H:${heart.rank}).`,"good");
+  state.phase="idle"; state.pending=null; markActionUsed(); render(); maybeRunAI();
+}
 function applyCrown(shipId){
   snapshot();
   const p = me();
@@ -252,50 +285,62 @@ function handleBuildSelectCard(cardIdx){
   const card = p.hand[cardIdx];
   if(!card) return;
 
-  // specials & joker count as your one action (handled via special_target)
+  // specials & joker (one action)
   if(card.suit==="JOKER" || (card.suit==="S" && [11,12,13].includes(card.rank))){
     state.phase="special_target"; state.pending={type:"special", cardIdx, card};
     if(card.suit==="JOKER") setHint("Joker: select an enemy ship with weapons (they go inactive for 1 turn).");
     else if(card.rank===11) setHint("J♠: select any enemy ship (3 Hull, bypass Shields).");
-    else if(card.rank===12) setHint("Q♠: select your strongest ship for reflect (≤5 on next attack).");
+    else if(card.rank===12) setHint("Q♠: select your ship for reflect (≤5 on next attack).");
     else if(card.rank===13) setHint("K♠: select any enemy ship (7 Hull, bypass Shields).");
     render();
     return;
   }
 
-  // pair launch detection
-  const pend = state.pending;
-  if(pend?.type==="build"){
-    const curr = pend.selectedCards;
-    // allow selecting at most 2 cards (one Club + one Heart) for launch
-    if(curr.length===0){
-      curr.push(cardIdx); // first pick
-      setHint(`Selected ${lbl(card)}. Pick a complementary card to launch (need one ♣ + one ♥), or click a ship to install this card normally.`);
+  // try pair-launch (♣ + ♥)
+  if(state.pending?.type==="build"){
+    const sel = state.pending.selectedCards;
+    if(sel.length===0){
+      sel.push(cardIdx);
+      setHint(`Selected ${lbl(card)}. Pick one ${card.suit==="C"?"♥":"♣"} to LAUNCH a new ship — or click a highlighted ship to install this ${lbl(card)}.`);
       render();
       return;
-    }else if(curr.length===1){
-      const first = p.hand[curr[0]];
+    }else if(sel.length===1){
+      const first = p.hand[sel[0]];
       const suits = [first.suit, card.suit].sort().join("");
-      if((suits==="CH") || (suits==="HC")){
-        // valid launch pair
-        pend.selectedCards.push(cardIdx);
+      if(suits==="CH"){ // valid pair
+        sel.push(cardIdx);
         state.phase = "launch_pair";
-        setHint("Launch: click an empty slot or replace a destroyed ship (Fleet cap = 3).");
+        setHint("Launch ready: click **Confirm Launch** (or click a valid ship to cancel and install single card).");
         render();
         return;
       }else{
-        // replace first selection with this one (toggle pick)
-        pend.selectedCards = [cardIdx];
-        setHint(`Selected ${lbl(card)}. Pick a complementary card (need one ♣ + one ♥), or click a ship to apply this card normally.`);
+        // replace selection with this card
+        state.pending.selectedCards = [cardIdx];
+        setHint(`Selected ${lbl(card)}. Pick the complementary ${card.suit==="C"?"♥":"♣"} to LAUNCH — or click a highlighted ship to install.`);
         render();
         return;
       }
     }
   }
 
-  // default single-card build flow
-  state.phase="build_select_ship"; state.pending={type:"build", cardIdx, card, selectedCards:[]};
-  setHint(`Build: select a ship for ${lbl(card)} (or pick a complementary card to launch).`);
+  // default single-card install
+  state.phase="build_select_ship";
+  state.pending={type:"build", cardIdx, card, selectedCards:[]};
+
+  // compute valid targets and explain if none
+  const targets = me().ships.filter(s=>canApplyCardToShip(card, s, me().id));
+  if(targets.length===0){
+    if(card.suit==="S"){
+      const maxE = Math.max(...me().ships.map(s=>s.engine));
+      setHint(`No valid targets for ${lbl(card)}. Your highest Engine is ${maxE}. Either upgrade ♣ first or play a different card.`);
+    }else if(card.suit==="C" || card.suit==="H" || card.suit==="D"){
+      setHint(`No valid targets: you can only build on your **own living** ships. (Destroyed ships can only be replaced by launching ♣+♥.)`);
+    }else{
+      setHint(`No valid targets for ${lbl(card)}.`);
+    }
+  }else{
+    setHint(`Build: select a **highlighted** ship to apply ${lbl(card)}.`);
+  }
   render();
 }
 
