@@ -70,7 +70,7 @@ header h1{font-size:18px;margin:0}
   border-radius:999px;padding:2px 8px;font-size:13px
 }
 
-/* Bigger, clearer shield bar with smaller font */
+/* Shield bar (active/inactive) */
 .shieldArc{
   width:100%;height:26px;
   background:linear-gradient(90deg,#93c5fd33,#93c5fd77,#93c5fd33);
@@ -110,3 +110,113 @@ header h1{font-size:18px;margin:0}
 .turnbar{height:4px;background:linear-gradient(90deg, var(--p1) 0 50%, var(--p2) 50% 100%)}
 .onceNote{font-size:11px;color:var(--muted);margin-left:auto}
 .onceNote.used{opacity:.7}
+
+/* =========================
+   iPhone / small screens
+   ========================= */
+@media (max-width: 600px) {
+  /* Layout: single column, tighter gutters */
+  .app{
+    grid-template-columns: 1fr;
+    gap: 8px;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Panels: edge-to-edge feel */
+  .col{
+    border-radius: 0;
+    border-left: none; border-right: none;
+  }
+
+  header{ padding: 10px 12px; }
+  header h1{ font-size: 16px; }
+
+  .section{ padding: 10px; }
+  .help{ font-size: 11px; }
+
+  /* Buttons: full-width rows on small screens with minimum tap size */
+  .stack{
+    gap: 6px;
+  }
+  .btn{
+    flex: 1 1 auto;
+    min-height: 44px;                 /* Apple HIG tap target */
+    padding: 10px 8px;
+    font-size: 14px;
+  }
+  /* Put the action row on two lines when needed */
+  .stack .btn { min-width: 40%; }
+  .onceNote{ display:none; }          /* hides the "one action" note on small screens */
+
+  /* Turn pill smaller */
+  .turnpill{ font-size: 11px; padding: 4px 6px; }
+
+  /* Battlefield grid: 1 card per row for readability */
+  .ships{
+    grid-template-columns: 1fr;       /* single column */
+    gap: 8px;
+  }
+
+  /* Ship card compaction */
+  .ship{ padding: 8px; }
+  .ship h3{ font-size: 14px; }
+  .role{ font-size: 10px; }
+
+  .grid{
+    grid-template-columns: 64px 1fr 56px;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .engine{
+    height: 44px;
+    font-size: 13px;
+  }
+
+  .badge{ font-size: 12px; padding: 2px 7px; }
+
+  /* Shield bar: slightly shorter with smaller text */
+  .shieldArc{
+    height: 22px;
+    font-size: 11px;
+  }
+
+  /* Damage chip position tighter */
+  .dmg{ right: 6px; bottom: 6px; font-size: 13px; }
+  .missile{ width: 16px; height: 16px; }
+
+  /* Hand: horizontal scroll strip (saves vertical space) */
+  .hand{
+    padding: 8px 6px;
+    gap: 6px;
+    overflow-x: auto;                 /* swipeable hand */
+    overflow-y: hidden;
+    white-space: nowrap;
+    display: block;                   /* break out of flex wrapping */
+    -webkit-overflow-scrolling: touch;
+  }
+  .hand::-webkit-scrollbar{ display: none; }
+
+  .card{
+    display: inline-block;            /* align in a horizontal strip */
+    min-width: 44px;                  /* tap target width */
+    padding: 8px 6px;
+    font-size: 14px;
+  }
+
+  /* Log: smaller and shorter, but still usable */
+  .log{
+    height: 160px;
+    font-size: 12px;
+    padding: 8px;
+  }
+
+  /* Turnbar slimmer */
+  .turnbar{ height: 3px; }
+
+  /* Controls color ring subtler on mobile (avoid heavy insets) */
+  .controls-p1{ box-shadow:none; }
+  .controls-p2{ box-shadow:none; }
+}
