@@ -24,7 +24,7 @@ const state = {
   log: [],
   // Phases: idle | build_pick | build_target | launch_pair | attack_select_attacker | attack_select_target | crown_select_ship | special_target
   phase: "idle",
-  pending: null,
+  pending: null,    // varies per phase (see beginBuild/handleBuildSelectCard)
   history: [],
   turnActionUsed: false,
   maxFleet: 3
@@ -62,7 +62,8 @@ function roleOf(ship){
 }
 function usableWeapons(ship){
   if(ship.weaponsInactiveTurns>0) return [];
-  return ship.weapons.filter(v=>v<=ship.engine);
+  const w = ship.weapons.filter(v=>v<=ship.engine);
+  return w;
 }
 function shipDamage(ship){
   const w = usableWeapons(ship);
@@ -76,7 +77,6 @@ function shipDamage(ship){
 
 /* Shields: rating + active flag + 1-turn cooldown */
 function applyDamage(target, amount, {bypassShields=false}={}){
-  if(!target || !target.alive) return 0;
   let dealt = 0;
   if(!bypassShields && target.shieldActive && target.shieldRating>0 && amount>0){
     const absorbed = Math.min(amount, target.shieldRating);
@@ -176,9 +176,7 @@ function endTurn(){
   startOfTurnDraw(p);
   checkWin();
   render();
-
-  // Let AI act now if it's P2's turn
-  runAIIfNeeded();
+  maybeRunAI();
 }
 function freeze(){ document.querySelectorAll("button").forEach(b=>b.disabled=true); }
 function checkWin(){
@@ -226,7 +224,7 @@ function applyCrown(shipId){
   ship.flagship=true; if(ship.engine<5) ship.engine=5;
   p.hand.splice(i,1);
   log(`${p.name} crowns ${ship.name}. Engine ≥ 5.`,"good");
-  state.phase="idle"; state.pending=null; markActionUsed(); render(); checkWin(); runAIIfNeeded();
+  state.phase="idle"; state.pending=null; markActionUsed(); render(); checkWin(); maybeRunAI();
 }
 function me(){ return state.players[state.turn]; }
 function opp(){ return state.players[1-state.turn]; }
@@ -250,6 +248,7 @@ function handleBuildSelectCard(cardIdx){
 
   // Build flow
   if(state.phase!=="build_pick" && state.phase!=="build_target"){ 
+    // if user clicks a card while not in build, start build
     beginBuild();
   }
 
@@ -280,8 +279,8 @@ function handleBuildSelectCard(cardIdx){
         state.pending.selectedIdx = cardIdx;
         state.pending.pairIdx = null;
         state.phase = "build_target";
-        const need2 = (card.suit==="C") ? "♥" : "♣";
-        setHint(`Selected ${lbl(card)}. Tap a highlighted ship to install, or select a ${need2} to LAUNCH a new ship.`);
+        const need = (card.suit==="C") ? "♥" : "♣";
+        setHint(`Selected ${lbl(card)}. Tap a highlighted ship to install, or select a ${need} to LAUNCH a new ship.`);
         render();
         return;
       }
@@ -292,11 +291,11 @@ function handleBuildSelectCard(cardIdx){
   state.pending.selectedIdx = cardIdx;
   state.phase = "build_target";
 
+  // Compute if any valid targets exist
   const targets = eligibleBuildTargets(me(), card);
   if(targets.length===0){
     if(card.suit==="S"){
-      const engines = me().ships.filter(s=>s.alive).map(s=>s.engine);
-      const maxE = engines.length ? Math.max(...engines) : 0;
+      const maxE = Math.max(...me().ships.filter(s=>s.alive).map(s=>s.engine));
       setHint(`No valid targets for ${lbl(card)}. Highest Engine is ${maxE}. Upgrade ♣ first or pick another card.`);
     }else{
       setHint(`No valid targets: build only on your living ships.`);
@@ -351,7 +350,7 @@ function confirmLaunch(){
   [a,b].sort((x,y)=>y-x).forEach(i=>p.hand.splice(i,1));
 
   log(`${p.name} launches a new ship (E:${club.rank} H:${heart.rank}).`,"good");
-  state.phase="idle"; state.pending=null; markActionUsed(); render(); runAIIfNeeded();
+  state.phase="idle"; state.pending=null; markActionUsed(); render(); maybeRunAI();
 }
 
 function applyBuildToShip(shipId){
@@ -386,7 +385,7 @@ function applyBuildToShip(shipId){
     log(`${p.name} installs weapon ${card.rank}♠ on ${ship.name}.`);
   }
 
-  state.phase="idle"; state.pending=null; markActionUsed(); render(); runAIIfNeeded();
+  state.phase="idle"; state.pending=null; markActionUsed(); render(); maybeRunAI();
 }
 
 /* ===== Specials ===== */
@@ -422,7 +421,7 @@ function applySpecialOn(targetId){
     state.history.pop(); return;
   }
 
-  state.phase="idle"; state.pending=null; markActionUsed(); render(); checkWin(); runAIIfNeeded();
+  state.phase="idle"; state.pending=null; markActionUsed(); render(); checkWin(); maybeRunAI();
 }
 
 /* ===== Attack ===== */
@@ -453,55 +452,26 @@ function performAttackOn(targetId){
     atk.reflect=false;
   }
 
-  state.phase="idle"; state.pending=null; markActionUsed(); render(); checkWin(); runAIIfNeeded();
+  state.phase="idle"; state.pending=null; markActionUsed(); render(); checkWin(); maybeRunAI();
 }
 
-/* ===== AI (Player 2) — Simple, timer-free gate ===== */
-let __aiBusy = false;
+/* ===== AI (Player 2) with difficulty ===== */
+function maybeRunAI(){
+  const aiOn = $("aiToggle").checked;
+  if(!aiOn) return;
+  if(state.turn!==1) return;
+  setTimeout(aiTakeTurn, 180);
+}
+function aiTakeTurn(){
+  if($("btnEndTurn").disabled) return;
+  if(state.turnActionUsed){ endTurn(); return; }
 
-function runAIIfNeeded() {
-  // AI must be ON (default ON if toggle missing), P2's turn, and phase must be idle
-  const aiOn = $("aiToggle") ? $("aiToggle").checked : true;
-  if (!aiOn) return;
-  if (state.turn !== 1) return;
-  if (state.phase !== "idle") return;
-  if (__aiBusy) return; // prevent recursion
-
-  __aiBusy = true;
-
-  // If P2 already used its action this turn, just end turn
-  if (state.turnActionUsed) {
-    __aiBusy = false;
-    endTurn();
-    return;
-  }
-
-  // Take exactly one action based on difficulty
-  try {
-    const sel = $("aiDifficulty");
-    const diff = sel ? sel.value : "normal";
-    if (diff === "easy")      aiEasy();
-    else if (diff === "hard") aiHard();
-    else                      aiNormal();
-  } catch (e) {
-    console.error("AI error:", e);
-    __aiBusy = false;
-    endTurn(); // fail-safe so game doesn't brick
-    return;
-  }
-
-  __aiBusy = false;
-
-  // After taking one action, AI has consumed its action; end its turn cleanly.
-  if (state.turn === 1) {
-    runAIIfNeeded(); // sees turnActionUsed=true and calls endTurn()
-  }
+  const diff = $("aiDifficulty").value;
+  if(diff==="easy") return aiEasy();
+  if(diff==="hard") return aiHard();
+  return aiNormal();
 }
 
-// Back-compat alias for any existing calls:
-function maybeRunAI(){ runAIIfNeeded(); }
-
-/* ===== AI brains ===== */
 function aiEasy(){
   const p = me(), o = opp();
   const choices = [];
@@ -520,8 +490,9 @@ function aiEasy(){
   if(sp.length) choices.push(()=>{
     const c = sp[Math.floor(Math.random()*sp.length)];
     const fit = p.ships.find(s=>s.alive && c.rank<=s.engine) || p.ships[0];
+    // use the new build flow
     state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
-    handleBuildSelectCard(p.hand.indexOf(c)); // to build_target
+    handleBuildSelectCard(p.hand.indexOf(c)); // moves to build_target
     applyBuildToShip(fit.id);
   });
   const club = p.hand.find(c=>c.suit==="C"), heart = p.hand.find(c=>c.suit==="H");
@@ -667,12 +638,11 @@ function aiHard(){
     state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
     handleBuildSelectCard(p.hand.indexOf(heartUp)); applyBuildToShip(s.id); return;
   }
-  const diam = p.hand.filter(c=>c.suit==="D").sort((a,b)=>b.rank-a-rank)[0]; // (typo in older versions)
-  const diamFixed = p.hand.filter(c=>c.suit==="D").sort((a,b)=>b.rank-a.rank)[0];
-  if(diamFixed){
+  const diam = p.hand.filter(c=>c.suit==="D").sort((a,b)=>b.rank-a.rank)[0];
+  if(diam){
     const s = p.ships.filter(s=>s.alive).sort((a,b)=>a.shieldRating - b.shieldRating)[0];
     state.phase="build_pick"; state.pending={type:"build",firstIdx:null,selectedIdx:null,pairIdx:null};
-    handleBuildSelectCard(p.hand.indexOf(diamFixed)); applyBuildToShip(s.id); return;
+    handleBuildSelectCard(p.hand.indexOf(diam)); applyBuildToShip(s.id); return;
   }
   const jok = p.hand.findIndex(c=>c.suit==="JOKER");
   const gun = opp().ships.filter(s=>s.alive && shipDamage(s)>0)
@@ -693,20 +663,16 @@ function setSelected(t){ $("selectedInfo").textContent=t||"—"; }
 function render(){
   const meColor = me().color;
   const col = $("controlsCol");
-  if(col){
-    col.classList.toggle("controls-p1", meColor==="p1");
-    col.classList.toggle("controls-p2", meColor==="p2");
-  }
-  if($("turnPill")) $("turnPill").innerHTML = `Turn: <span class="${meColor}">${me().name}</span>`;
+  col.classList.toggle("controls-p1", meColor==="p1");
+  col.classList.toggle("controls-p2", meColor==="p2");
+  $("turnPill").innerHTML = `Turn: <span class="${meColor}">${me().name}</span>`;
   const handDiv = $("hand");
-  if(handDiv){
-    handDiv.classList.toggle("p1", meColor==="p1");
-    handDiv.classList.toggle("p2", meColor==="p2");
-  }
-  if($("deckCount")) $("deckCount").textContent = state.deck.length;
-  if($("handCount")) $("handCount").textContent = me().hand.length;
+  handDiv.classList.toggle("p1", meColor==="p1");
+  handDiv.classList.toggle("p2", meColor==="p2");
+  $("deckCount").textContent = state.deck.length;
+  $("handCount").textContent = me().hand.length;
 
-  const b = $("board"); if(b) b.innerHTML="";
+  const b = $("board"); b.innerHTML="";
   state.players.forEach(p=>{
     const side = document.createElement("div"); side.className="side";
     side.innerHTML = `<div><strong class="${p.color}">${p.name}</strong></div>`;
@@ -715,7 +681,7 @@ function render(){
     const highlightMap = computeShipHighlights(p.id);
 
     p.ships.forEach(s=>{
-      const d = document.createElement("div"); d.className="hip ship"+(s.alive?"":" dead"); d.dataset.sid = s.id;
+      const d = document.createElement("div"); d.className="ship"+(s.alive?"":" dead"); d.dataset.sid = s.id;
       if(highlightMap[s.id]) d.classList.add("hl");
 
       const role = roleOf(s);
@@ -756,38 +722,40 @@ function render(){
       grid.appendChild(d);
     });
 
-    side.appendChild(grid); if(b) b.appendChild(side);
+    side.appendChild(grid); b.appendChild(side);
   });
 
   // Hand
-  const hand = $("hand"); if(hand) hand.innerHTML="";
+  const hand = $("hand"); hand.innerHTML="";
   const p = me();
 
   p.hand.forEach((c,idx)=>{
     const el=document.createElement("div"); el.className="card "+({C:"c",H:"h",D:"d",S:"s"}[c.suit]||"");
     el.textContent=lbl(c);
 
+    // Highlight the chosen card during build_target
     if(state.phase==="build_target" && state.pending?.selectedIdx===idx) el.classList.add("sel");
+    // While launching, disable hand (except maybe undo)
     if(state.phase==="special_target" || state.phase==="launch_pair") el.classList.add("disabled");
 
     el.addEventListener("click", ()=>{
       if(state.phase==="build_pick" || state.phase==="build_target"){ handleBuildSelectCard(idx); }
       else { setSelected(`Card • ${lbl(c)}`); }
     });
-    if(hand) hand.appendChild(el);
+    hand.appendChild(el);
   });
 
   const used = state.turnActionUsed;
   const launching = (state.phase==="launch_pair");
 
-  if($("btnConfirmLaunch")) $("btnConfirmLaunch").style.display = launching ? "inline-block" : "none";
-  if($("btnBuild"))  $("btnBuild").disabled  = used || (!["idle","build_pick","build_target","launch_pair"].includes(state.phase));
-  if($("btnAttack")) $("btnAttack").disabled = used || (state.phase!=="idle");
-  if($("btnCrown"))  $("btnCrown").disabled  = used || (state.phase!=="idle");
-  if($("onceNote"))  $("onceNote").classList.toggle("used", used);
+  $("btnConfirmLaunch").style.display = launching ? "inline-block" : "none";
+  $("btnBuild").disabled  = used || (!["idle","build_pick","build_target","launch_pair"].includes(state.phase));
+  $("btnAttack").disabled = used || (state.phase!=="idle");
+  $("btnCrown").disabled  = used || (state.phase!=="idle");
+  $("onceNote").classList.toggle("used", used);
 
-  if($("deckCount")) $("deckCount").textContent = state.deck.length;
-  if($("handCount")) $("handCount").textContent = me().hand.length;
+  $("deckCount").textContent = state.deck.length;
+  $("handCount").textContent = me().hand.length;
 }
 
 function computeShipHighlights(ownerId){
@@ -818,7 +786,7 @@ function computeShipHighlights(ownerId){
       if(ownerId===me().id && pend.card.rank===12 && pend.card.suit==="S"){ // Q♠ reflect → my side only
         if(s.alive) map[s.id]=true;
       }
-      if(ownerId===opp().id && (pend.card.suit==="JOKER" || (pend.card.suit==="S" && pend.card.rank!==12))){
+      if(ownerId===opp().id && pend.card.suit!=="JOKER" ? pend.card.rank!==12 : true){
         if(s.alive) map[s.id]=true; // J/K/Joker target any enemy alive (Joker requires weapons check on click)
       }
     }
@@ -828,22 +796,17 @@ function computeShipHighlights(ownerId){
 
 function renderLog(){
   const el=$("log");
-  if(!el) return;
   el.innerHTML = state.log.map(l=>`<div class="${l.cls||''}">${l.msg}</div>`).join("");
 }
 
 /* ================= Wiring ================= */
-if($("btnBuild")) $("btnBuild").addEventListener("click", ()=>{ beginBuild(); });
-if($("btnAttack")) $("btnAttack").addEventListener("click", ()=>{ beginAttack(); });
-if($("btnCrown")) $("btnCrown").addEventListener("click", ()=>{ beginCrown(); });
-if($("btnUndo")) $("btnUndo").addEventListener("click", ()=>{ undo(); });
-if($("btnEndTurn")) $("btnEndTurn").addEventListener("click", ()=>{ endTurn(); });
-if($("btnNewGame")) $("btnNewGame").addEventListener("click", ()=>{ initGame(); });
-if($("btnConfirmLaunch")) $("btnConfirmLaunch").addEventListener("click", ()=>{ confirmLaunch(); });
-
-// React if you toggle AI mid-turn
-const _aiTgl = $("aiToggle");
-if (_aiTgl) { _aiTgl.addEventListener("change", () => runAIIfNeeded()); }
+$("btnBuild").addEventListener("click", ()=>{ beginBuild(); });
+$("btnAttack").addEventListener("click", ()=>{ beginAttack(); });
+$("btnCrown").addEventListener("click", ()=>{ beginCrown(); });
+$("btnUndo").addEventListener("click", ()=>{ undo(); });
+$("btnEndTurn").addEventListener("click", ()=>{ endTurn(); });
+$("btnNewGame").addEventListener("click", ()=>{ initGame(); });
+$("btnConfirmLaunch").addEventListener("click", ()=>{ confirmLaunch(); });
 
 /* ================= Start ================= */
 initGame();
