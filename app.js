@@ -457,36 +457,60 @@ function performAttackOn(targetId){
 
 /* ===== AI (Player 2) with difficulty ===== */
 // Replace your maybeRunAI with this version
+// --- DROP-IN REPLACEMENT ---
 let __aiTimer = null;
+
+// Call this anywhere; it safely retries until the AI can act.
 function maybeRunAI() {
-  // 1) Is AI enabled and is it Player 2's turn?
-  const aiOn = $("aiToggle") ? $("aiToggle").checked : true; // default-on if control missing
+  // 1) Must be P2's turn and AI enabled
+  const aiOn = $("aiToggle") ? $("aiToggle").checked : true;  // default ON if the toggle is absent
   if (!aiOn) return;
   if (state.turn !== 1) return;
 
-  // 2) If AI already used its action this turn, end the turn shortly.
+  // 2) If an action already consumed this turn, just end turn shortly
   if (state.turnActionUsed) {
     if (__aiTimer) clearTimeout(__aiTimer);
-    __aiTimer = setTimeout(() => { endTurn(); }, 140);
+    __aiTimer = setTimeout(() => endTurn(), 120);
     return;
   }
 
-  // 3) Only act from a clean "idle" phase; otherwise poll until idle.
+  // 3) Only act from a clean idle; otherwise poll until idle
   if (state.phase !== "idle") {
     if (__aiTimer) clearTimeout(__aiTimer);
-    __aiTimer = setTimeout(maybeRunAI, 120);
+    __aiTimer = setTimeout(maybeRunAI, 80);
     return;
   }
 
-  // 4) Debounced invoke of the selected difficulty.
+  // 4) Debounced invoke of difficulty
   if (__aiTimer) clearTimeout(__aiTimer);
   __aiTimer = setTimeout(() => {
-    const diffSel = $("aiDifficulty");
-    const diff = diffSel ? diffSel.value : "normal";
-    if (diff === "easy")      aiEasy();
-    else if (diff === "hard") aiHard();
-    else                      aiNormal();
-  }, 180);
+    const sel = $("aiDifficulty");
+    const diff = sel ? sel.value : "normal";
+    try {
+      if (diff === "easy")      aiEasy();
+      else if (diff === "hard") aiHard();
+      else                      aiNormal();
+    } catch (e) {
+      console.error("AI error:", e);
+      // fail-safe: don't brick the game turn
+      endTurn();
+    }
+  }, 160);
+}
+
+// Keeps the AI from double-acting; only used by maybeRunAI
+function aiTakeTurn() {
+  // Not used anymore; left here for compatibility if referenced elsewhere
+  return maybeRunAI();
+}
+
+// OPTIONAL: ensure the AI reacts when you toggle it on mid-turn
+const _aiTgl = $("aiToggle");
+if (_aiTgl) {
+  _aiTgl.addEventListener("change", () => {
+    // If you switch AI on during P2's turn, kick it immediately
+    if (_aiTgl.checked) maybeRunAI();
+  });
 }
 
 function aiEasy(){
