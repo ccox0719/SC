@@ -1,75 +1,101 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Space Fleet Battle — 2P</title>
+  <title>Space Fleet Battle</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Optional: your stylesheet -->
   <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Minimal visual affordances so you can test quickly */
+    body { font-family: system-ui, sans-serif; margin: 12px; }
+    #app { display: grid; gap: 12px; }
+    #controlsCol { display: grid; gap: 8px; align-content: start; max-width: 720px; }
+    .controls-p1 { border-left: 6px solid #2b6cb0; padding-left: 8px; }
+    .controls-p2 { border-left: 6px solid #b83280; padding-left: 8px; }
+    #turnPill { font-weight: 700; }
+    #board { display: grid; gap: 12px; }
+    .side { border: 1px solid #ddd; padding: 8px; border-radius: 6px; }
+    .ships { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 8px; }
+    .ship { border: 1px solid #ccc; border-radius: 6px; padding: 6px; position: relative; }
+    .ship.dead { opacity: .5; }
+    .ship.hl { outline: 2px solid #f59e0b; }
+    .shiphead { display:flex; justify-content:space-between; gap:8px; }
+    .grid { display:grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items:center; }
+    .badge { display:inline-flex; align-items:center; gap:6px; background:#f3f4f6; padding:2px 6px; border-radius:999px; }
+    .icon { font-weight:700; }
+    .shieldArc { font-size: 12px; }
+    .shieldArc.inactive { opacity:.6; text-decoration: line-through; }
+    .flag, .reflect, .jokered { position:absolute; top:4px; right:6px; font-size:11px; background:#e5e7eb; padding:2px 6px; border-radius:999px; }
+    .reflect { right: 64px; }
+    .jokered { right: 130px; }
+    .dmg { font-weight: 800; margin-top: 6px; }
+    #hand { display:flex; flex-wrap:wrap; gap:6px; }
+    .card { border:1px solid #bbb; padding:6px 8px; border-radius:6px; min-width:42px; text-align:center; background:#fff; cursor:pointer; }
+    .card.sel { outline:2px solid #f59e0b; }
+    .card.disabled { pointer-events:none; opacity:.6; }
+    #log { max-height: 200px; overflow:auto; border:1px solid #ddd; padding:6px; border-radius:6px; background:#fafafa; }
+    #btnConfirmLaunch { display:none; }
+    .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .spacer { height:1px; background:#eee; margin:8px 0; }
+  </style>
 </head>
 <body>
-  <div class="app">
-    <div class="col" id="controlsCol">
-      <header>
-        <h1>Controls</h1>
-        <div class="turnpill" id="turnPill">Turn: <span class="p1">Player 1</span></div>
-      </header>
+  <div id="app">
+    <!-- Controls / HUD -->
+    <section id="controlsCol" class="controls-p1">
+      <div id="turnPill">Turn: <span class="p1">Player 1</span></div>
 
-      <div class="section">
-        <div class="stack">
-          <button class="btn primary" id="btnBuild">Build</button>
-          <button class="btn" id="btnAttack">Attack</button>
-          <button class="btn" id="btnCrown">Play Ace (Crown)</button>
-          <button class="btn warn" id="btnUndo">Undo</button>
-          <button class="btn" id="btnEndTurn">End Turn</button>
-          <button class="btn" id="btnNewGame">New Game</button>
-          <span class="onceNote" id="onceNote">One action per turn</span>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <label class="toggle"><input type="checkbox" id="aiToggle" /> AI controls Player 2</label>
-          <label class="toggle" title="AI difficulty for Player 2">
-            <span>Difficulty</span>
-            <select id="aiDifficulty">
-              <option value="easy">Easy</option>
-              <option value="normal" selected>Normal</option>
-              <option value="hard">Hard</option>
-            </select>
-          </label>
-        </div>
-        <p class="help" id="actionHint">Select an action.</p>
+      <div class="row">
+        <button id="btnBuild">Build</button>
+        <button id="btnAttack">Attack</button>
+        <button id="btnCrown">Play Ace (Crown)</button>
+        <button id="btnUndo">Undo</button>
+        <button id="btnEndTurn">End Turn</button>
+        <button id="btnNewGame">New Game</button>
+        <!-- This button is controlled by JS visibility -->
+        <button id="btnConfirmLaunch">Confirm Launch</button>
       </div>
 
-      <div class="section">
-        <div class="row">
-          <div><strong>Deck:</strong> <span id="deckCount"></span></div>
-          <div><strong>Your hand:</strong> <span id="handCount"></span></div>
-        </div>
+      <div class="row">
+        <label class="row"><input type="checkbox" id="aiToggle" checked /> AI controls Player 2</label>
+        <label class="row">Difficulty
+          <select id="aiDifficulty">
+            <option value="easy">Easy</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Hard</option>
+          </select>
+        </label>
       </div>
 
-      <div class="section">
-        <strong>Selected:</strong>
-        <div id="selectedInfo" class="help">—</div>
-      </div>
+      <div class="row">Deck: <span id="deckCount">0</span> • Your hand: <span id="handCount">0</span></div>
+      <div id="actionHint">Select an action.</div>
+      <div>Selected:</div>
+      <div id="selectedInfo">—</div>
+    </section>
 
-      <div class="turnbar" id="turnbar"></div>
-    </div>
+    <div class="spacer"></div>
 
-    <div class="col">
-      <header>
-        <h1>Battlefield</h1>
-        <div><strong>Player Colors:</strong> <span class="p1">P1</span> / <span class="p2">P2</span></div>
-      </header>
+    <!-- Board -->
+    <section>
+      <h2>Battlefield</h2>
+      <div id="board"></div>
+    </section>
 
-      <div class="section board" id="board"></div>
+    <!-- Hand -->
+    <section>
+      <h2>Hand</h2>
+      <div id="hand"></div>
+    </section>
 
-      <div class="section">
-        <strong>Hand</strong>
-        <div id="hand" class="hand"></div>
-      </div>
-
-      <div class="log" id="log"></div>
-    </div>
+    <!-- Log -->
+    <section>
+      <h2>Log</h2>
+      <div id="log"></div>
+    </section>
   </div>
 
+  <!-- Your game logic -->
   <script src="app.js"></script>
 </body>
 </html>
