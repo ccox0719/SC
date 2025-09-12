@@ -1,222 +1,300 @@
-:root{
-  --bg:#0b0f14; --panel:#111826; --panel2:#172134; --ink:#e7eefc; --muted:#a9b4c8;
-  --line:#243247;
-  --p1:#6fb6ff; --p1-soft:#18324f; --p1-mid:#204469;
-  --p2:#ff7b83; --p2-soft:#3a1c23; --p2-mid:#582c36;
-  --good:#6ee7a8; --bad:#ff7189; --warn:#ffd36e; --accent:#7cc7ff;
-  --hl:#8b5cf6; --shield:#93c5fd;
+/* =========================================================
+   Space Fleet Battle — Mobile-first, Sleek UI
+   Works with your current HTML/JS structure.
+   ========================================================= */
+
+/* ---------- Theme ---------- */
+:root {
+  --p1: #5aa1ff;      /* Player 1 accent */
+  --p2: #ff6fb0;      /* Player 2 accent */
+  --bg: #0b0f16;
+  --panel: #121824;
+  --panel-2: #0f1520;
+  --text: #e6ecf3;
+  --muted: #9aa6b2;
+  --border: #223045;
+  --accent: #ffbf4d;
+
+  --good: #36d07f;
+  --bad:  #ff6b6b;
+  --warn: #ffcc4d;
+
+  --chip: #1a2433;
+  --chip-2: #202b3d;
+
+  --radius: 12px;
+  --radius-sm: 10px;
+
+  --iphone-safe-top: env(safe-area-inset-top, 0);
+  --iphone-safe-bottom: env(safe-area-inset-bottom, 0);
 }
 
-html,body{
-  margin:0;height:100%;
-  background:var(--bg);color:var(--ink);
-  font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif
+/* System dark mode (keeps same palette) */
+@media (prefers-color-scheme: light) {
+  :root { /* keep dark theme for contrast */ }
 }
 
-.app{
-  display:grid;grid-template-columns:340px 1fr;gap:12px;
-  max-width:1280px;margin:14px auto;padding:0 10px
-}
-.col{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-header{
-  padding:12px 14px;background:linear-gradient(180deg,var(--panel2),transparent);
-  display:flex;justify-content:space-between;align-items:center
-}
-header h1{font-size:18px;margin:0}
-.turnpill{font-size:12px;border:1px solid var(--line);padding:4px 8px;border-radius:999px}
-.p1{color:var(--p1)} .p2{color:var(--p2)}
-.section{padding:12px;border-top:1px solid var(--line)}
-.stack{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.btn{border:1px solid var(--line);background:#0f1827;color:var(--ink);padding:8px 10px;border-radius:10px;cursor:pointer}
-.btn.primary{border-color:#38bdf8;background:#0b253d}
-.btn.warn{border-color:#f59e0b;background:#231a08}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-.toggle{display:flex;align-items:center;gap:6px}
-.toggle input{transform:scale(1.2)}
-.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.help{font-size:12px;color:var(--muted)}
-.board{display:grid;grid-template-columns:1fr;gap:12px}
-.side{border:1px dashed var(--line);border-radius:10px;padding:10px}
-.ships{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:8px}
-
-.ship{
-  background:var(--panel2);border:1px solid #233044;border-radius:12px;
-  padding:10px;position:relative;transition:transform .08s ease, box-shadow .08s ease
-}
-.ship.dead{opacity:.45;filter:grayscale(1)}
-.ship.hl{outline:2px solid var(--hl); box-shadow:0 0 0 4px #8b5cf633;}
-.flag{position:absolute;right:8px;top:8px;background:#ffd36e20;border:1px solid var(--warn);color:var(--warn);font-size:11px;border-radius:6px;padding:2px 6px}
-.reflect{position:absolute;left:8px;top:8px;background:#7affff22;border:1px solid #7affff;color:#9ff; font-size:11px;border-radius:6px;padding:2px 6px}
-.jokered{position:absolute;left:8px;bottom:8px;background:#ff7b831e;border:1px solid var(--bad);color:var(--bad);font-size:11px;border-radius:6px;padding:2px 6px}
-
-.shiphead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.ship h3{margin:0;font-size:15px}
-.role{font-size:11px;border:1px solid #2b3a50;border-radius:999px;padding:2px 7px;color:var(--muted)}
-
-.grid{display:grid;grid-template-columns:76px 1fr 60px;gap:8px;align-items:center}
-
-/* Smaller engine block */
-.engine{
-  display:flex;align-items:center;justify-content:center;background:#061221;
-  border:1px solid #1f2a3f;border-radius:10px;height:50px;
-  font-weight:700; font-size:14px
-}
-.engine .icon{margin-right:4px;color:#93e5ff}
-
-/* Hull + Shields block */
-.hull,.shieldBox{display:flex;gap:6px;align-items:center;flex-direction:column}
-.badge{
-  display:inline-flex;gap:6px;align-items:center;border:1px solid #2b3a50;
-  border-radius:999px;padding:2px 8px;font-size:13px
+/* ---------- Page ---------- */
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 16px/1.35 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Shield bar (active/inactive) */
-.shieldArc{
-  width:100%;height:26px;
-  background:linear-gradient(90deg,#93c5fd33,#93c5fd77,#93c5fd33);
-  border:1px solid #93c5fd; border-radius:999px;
-  display:flex;align-items:center;justify-content:center;
-  color:#e8f2ff; font-size:12px; font-weight:700; letter-spacing:.2px;
-  box-shadow:0 0 16px #93c5fd44 inset
+#app {
+  display: grid;
+  gap: 12px;
+  padding: calc(10px + var(--iphone-safe-top)) 12px calc(12px + var(--iphone-safe-bottom));
+  max-width: 980px;
+  margin: 0 auto;
 }
-.shieldArc.inactive{
-  background:linear-gradient(90deg,#5b708833,#5b708877,#5b708833);
-  border-color:#6b7f99; color:#c7d2e1;
-  opacity:.8
+
+/* ---------- Controls / HUD (sticky, compact) ---------- */
+#controlsCol {
+  position: sticky;
+  top: calc(6px + var(--iphone-safe-top));
+  z-index: 20;
+  display: grid;
+  gap: 10px;
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  box-shadow: 0 6px 12px rgba(0,0,0,.18);
 }
-.shieldArc.ping{animation:ping 380ms ease-out}
-@keyframes ping{ 0%{box-shadow:0 0 0 0 rgba(147,197,253,.9)} 100%{box-shadow:0 0 20px 6px rgba(147,197,253,0)} }
 
-.weps{margin-top:6px;font-size:13px}
-.dmg{position:absolute;right:8px;bottom:8px;display:flex;align-items:center;gap:6px;font-weight:700}
-.missile{width:18px;height:18px;border-radius:3px;background:linear-gradient(90deg,#bbb,#eee);border:1px solid #999;transform:skewX(-12deg)}
+/* Side color rail for whose turn */
+#controlsCol.controls-p1 { box-shadow: inset 3px 0 0 0 var(--p1), 0 6px 12px rgba(0,0,0,.18); }
+#controlsCol.controls-p2 { box-shadow: inset 3px 0 0 0 var(--p2), 0 6px 12px rgba(0,0,0,.18); }
 
-.hand{
-  display:flex;gap:6px;flex-wrap:wrap;border:1px dashed var(--line);padding:8px;border-radius:10px
+#turnPill {
+  font-weight: 700;
+  font-size: 14px;
 }
-.hand.p1{background:linear-gradient(180deg, var(--p1-soft), transparent)} 
-.hand.p2{background:linear-gradient(180deg, var(--p2-soft), transparent)}
-.card{border:1px solid #334155;background:#0f172a;border-radius:8px;padding:6px 7px;min-width:42px;text-align:center;cursor:pointer;user-select:none}
-.card.s{border-color:#374151} .card.c{border-color:#2dd4bf}
-.card.h{border-color:#fca5a5} .card.d{border-color:#93c5fd}
-.card.sel{outline:2px solid var(--accent)}
-.card.disabled{opacity:.4;cursor:not-allowed}
 
-.log{height:240px;overflow:auto;background:#0b1220;border-top:1px solid var(--line);padding:8px 10px;font-size:13px}
-.good{color:var(--good)} .bad{color:var(--bad)} .muted{color:var(--muted)}
+/* Segmented actions: horizontal scrollable row */
+.controls-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.controls-row::-webkit-scrollbar { display: none; }
 
-.controls-p1{box-shadow:inset 0 0 0 2px var(--p1-mid)}
-.controls-p2{box-shadow:inset 0 0 0 2px var(--p2-mid)}
-.turnbar{height:4px;background:linear-gradient(90deg, var(--p1) 0 50%, var(--p2) 50% 100%)}
-.onceNote{font-size:11px;color:var(--muted);margin-left:auto}
-.onceNote.used{opacity:.7}
+/* Buttons as modern chips */
+button {
+  background: var(--chip);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: .1px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s ease, transform .04s ease, border-color .12s ease;
+}
+button:hover { background: var(--chip-2); border-color: #2c3c52; }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: .5; pointer-events: none; }
 
-/* =========================
-   iPhone / small screens
-   ========================= */
+#btnConfirmLaunch { display: none; }
+
+/* Inline meta */
+.meta {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  font-size: 13px; color: var(--muted);
+}
+.meta b { color: var(--text); }
+
+#actionHint { font-size: 13px; color: var(--muted); }
+#selectedInfo { color: var(--text); }
+
+/* Toggle / select row */
+.inline-controls {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+}
+.inline-controls label, .inline-controls select {
+  font-size: 14px; color: var(--text);
+}
+.inline-controls select {
+  background: var(--chip);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 12px;
+}
+
+/* ---------- Battlefield ---------- */
+h2 { margin: 8px 0 0; font-size: 16px; font-weight: 700; }
+
+#board { display: grid; gap: 12px; }
+
+.side {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+.side > div:first-child strong.p1 { color: var(--p1); }
+.side > div:first-child strong.p2 { color: var(--p2); }
+
+/* Grid of ships */
+.ships {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* Ship card */
+.ship {
+  position: relative;
+  background: linear-gradient(180deg, #151d2a 0%, #0f1723 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+.ship.dead { opacity: .45; filter: grayscale(.25); }
+.ship.hl { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Header row */
+.shiphead {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.shiphead h3 {
+  margin: 0; font-size: 14px; font-weight: 700; letter-spacing: .2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 66%;
+}
+.shiphead .role {
+  font-size: 11px; color: var(--muted); background: #101623;
+  border: 1px solid #1e2a3e; padding: 2px 8px; border-radius: 999px;
+}
+
+/* Stat grid */
+.ship .grid {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Badges */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #0f1723; padding: 4px 8px; border-radius: 999px;
+  border: 1px solid #1e2a38; color: var(--text);
+}
+.icon { font-weight: 800; }
+
+/* Sections */
+.hull, .engine, .weapons { display: flex; align-items: center; gap: 8px; }
+.engine { justify-self: end; }
+.hull .badge { background: #111b2a; }
+.weapons .badge { white-space: nowrap; }
+
+/* Shield strip — smaller & readable */
+.shieldBox { display: flex; align-items: center; }
+.shieldArc {
+  font-size: 12px;
+  color: var(--text);
+  opacity: .9;
+}
+.shieldArc.inactive { opacity: .55; text-decoration: line-through; }
+
+/* Status chips */
+.flag, .reflect, .jokered {
+  position: absolute; top: 6px; right: 8px;
+  font-size: 11px; padding: 3px 8px; border-radius: 999px;
+  background: #212a3b; border: 1px solid #2a3750; color: var(--text);
+}
+.reflect { right: 86px; }
+.jokered { right: 154px; }
+
+/* Damage display */
+.dmg {
+  margin-top: 8px; font-weight: 800; font-size: 18px;
+  display: flex; align-items: center; gap: 8px;
+}
+.dmg .missile {
+  width: 18px; height: 18px; border-radius: 3px;
+  background: linear-gradient(90deg, #ff9662, #ffd56b);
+  box-shadow: 0 0 6px rgba(255, 197, 102, .35);
+}
+
+/* ---------- Hand ---------- */
+#hand {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+
+.card {
+  background: #0f1420;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  text-align: center;
+  padding: 6px 4px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  letter-spacing: .2px;
+}
+.card.sel { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card.disabled { opacity: .55; pointer-events: none; }
+
+/* Suit tint (subtle) */
+.card.c { color: #76c4ff; }  /* Clubs */
+.card.h { color: #ff8c95; }  /* Hearts */
+.card.d { color: #93eaff; }  /* Diamonds */
+.card.s { color: #d2b7ff; }  /* Spades */
+
+/* ---------- Log ---------- */
+#log {
+  max-height: 240px; overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  font-size: 14px;
+}
+#log .good { color: var(--good); }
+#log .bad  { color: var(--bad); }
+#log .warn { color: var(--warn); }
+#log .muted { color: var(--muted); }
+
+/* ---------- Mobile polish ---------- */
+@supports (padding: max(0px)) {
+  #app { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+}
+
 @media (max-width: 600px) {
-  /* Layout: single column, tighter gutters */
-  .app{
-    grid-template-columns: 1fr;
-    gap: 8px;
-    max-width: 100%;
-    margin: 0;
-    padding: 0;
-  }
-
-  /* Panels: edge-to-edge feel */
-  .col{
-    border-radius: 0;
-    border-left: none; border-right: none;
-  }
-
-  header{ padding: 10px 12px; }
-  header h1{ font-size: 16px; }
-
-  .section{ padding: 10px; }
-  .help{ font-size: 11px; }
-
-  /* Buttons: full-width rows on small screens with minimum tap size */
-  .stack{
-    gap: 6px;
-  }
-  .btn{
-    flex: 1 1 auto;
-    min-height: 44px;                 /* Apple HIG tap target */
-    padding: 10px 8px;
-    font-size: 14px;
-  }
-  /* Put the action row on two lines when needed */
-  .stack .btn { min-width: 40%; }
-  .onceNote{ display:none; }          /* hides the "one action" note on small screens */
-
-  /* Turn pill smaller */
-  .turnpill{ font-size: 11px; padding: 4px 6px; }
-
-  /* Battlefield grid: 1 card per row for readability */
-  .ships{
-    grid-template-columns: 1fr;       /* single column */
-    gap: 8px;
-  }
-
-  /* Ship card compaction */
-  .ship{ padding: 8px; }
-  .ship h3{ font-size: 14px; }
-  .role{ font-size: 10px; }
-
-  .grid{
-    grid-template-columns: 64px 1fr 56px;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .engine{
-    height: 44px;
-    font-size: 13px;
-  }
-
-  .badge{ font-size: 12px; padding: 2px 7px; }
-
-  /* Shield bar: slightly shorter with smaller text */
-  .shieldArc{
-    height: 22px;
-    font-size: 11px;
-  }
-
-  /* Damage chip position tighter */
-  .dmg{ right: 6px; bottom: 6px; font-size: 13px; }
-  .missile{ width: 16px; height: 16px; }
-
-  /* Hand: horizontal scroll strip (saves vertical space) */
-  .hand{
-    padding: 8px 6px;
-    gap: 6px;
-    overflow-x: auto;                 /* swipeable hand */
-    overflow-y: hidden;
-    white-space: nowrap;
-    display: block;                   /* break out of flex wrapping */
-    -webkit-overflow-scrolling: touch;
-  }
-  .hand::-webkit-scrollbar{ display: none; }
-
-  .card{
-    display: inline-block;            /* align in a horizontal strip */
-    min-width: 44px;                  /* tap target width */
-    padding: 8px 6px;
-    font-size: 14px;
-  }
-
-  /* Log: smaller and shorter, but still usable */
-  .log{
-    height: 160px;
-    font-size: 12px;
-    padding: 8px;
-  }
-
-  /* Turnbar slimmer */
-  .turnbar{ height: 3px; }
-
-  /* Controls color ring subtler on mobile (avoid heavy insets) */
-  .controls-p1{ box-shadow:none; }
-  .controls-p2{ box-shadow:none; }
+  .ships { grid-template-columns: 1fr; }
+  .ship .grid { grid-template-columns: 1fr 1fr; }
+  .reflect { top: auto; bottom: 6px; right: 8px; }
+  .jokered { top: auto; bottom: 6px; right: 86px; }
+  #controlsCol { padding: 10px; }
 }
+
+/* ---------- Tiny helpers for your current markup ---------- */
+/* Make first button row scrollable (use this class on the container if desired) */
+#controlsCol > div:nth-child(2) { display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+#controlsCol > div:nth-child(2)::-webkit-scrollbar { display: none; }
+
+/* Second row (AI toggle + difficulty) nicely aligned */
+#controlsCol > div:nth-child(3) { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
