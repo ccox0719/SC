@@ -324,7 +324,6 @@ App.flow = (function(){
     Object.assign(S, U.deep(snap));
     Rn.render();
   }
-
   function log(){ return Rn.log.apply(null, arguments); }
 
   function draw(p, n){
@@ -375,14 +374,18 @@ App.flow = (function(){
   function initGame(){
     S.deck = U.makeDeck();
 
-    // starters
+    // starters (seed suit arrays so recompute works)
     S.players[0].ships = [
-      {id:"p1a", name:"P1 Ship A", engine:3, hull:2, shieldRating:2, shieldActive:true, shieldCooldown:0, weapons:[], weaponsInactiveTurns:0, alive:true, flagship:false, reflect:false},
-      {id:"p1b", name:"P1 Ship B", engine:4, hull:5, shieldRating:0, shieldActive:false, shieldCooldown:0, weapons:[], weaponsInactiveTurns:0, alive:true, flagship:false, reflect:false}
+      // P1A: E3 H2 ♦2 active
+      seedShip({id:"p1a", name:"P1 Ship A", engine:3, hull:2, shieldRating:2, shieldActive:true}),
+      // P1B: E4 H5 no shield
+      seedShip({id:"p1b", name:"P1 Ship B", engine:4, hull:5, shieldRating:0, shieldActive:false})
     ];
     S.players[1].ships = [
-      {id:"p2a", name:"P2 Ship A", engine:2, hull:3, shieldRating:3, shieldActive:true, shieldCooldown:0, weapons:[], weaponsInactiveTurns:0, alive:true, flagship:false, reflect:false},
-      {id:"p2b", name:"P2 Ship B", engine:5, hull:4, shieldRating:0, shieldActive:false, shieldCooldown:0, weapons:[], weaponsInactiveTurns:0, alive:true, flagship:false, reflect:false}
+      // P2A: E2 H3 ♦3 active
+      seedShip({id:"p2a", name:"P2 Ship A", engine:2, hull:3, shieldRating:3, shieldActive:true}),
+      // P2B: E5 H4 no shield
+      seedShip({id:"p2b", name:"P2 Ship B", engine:5, hull:4, shieldRating:0, shieldActive:false})
     ];
 
     // hands P1:7, P2:6 (Ace guaranteed)
@@ -404,6 +407,24 @@ App.flow = (function(){
     Rn.render();
   }
 
+  // Build seed helper: create suit arrays that reproduce the given numbers
+  function seedShip(base){
+    const s = {
+      id: base.id, name: base.name,
+      engine: base.engine, hull: base.hull,
+      shieldRating: base.shieldRating||0, shieldActive: !!base.shieldActive, shieldCooldown:0,
+      weapons: [], weaponsInactiveTurns:0,
+      alive:true, flagship:false, reflect:false,
+      _clubs:    base.engine>0        ? [base.engine]       : [],
+      _hearts:   base.hull>0          ? [base.hull]         : [],
+      _diamonds: (base.shieldRating||0)>0 ? [base.shieldRating] : [],
+      _spades: []
+    };
+    // normalize through recompute to lock values to the stacking rule
+    C.recomputeStats(s);
+    return s;
+  }
+
   /* ----- Turn Flow ----- */
   function endTurn(){
     snapshot();
@@ -418,7 +439,6 @@ App.flow = (function(){
     checkWin();
     Rn.render();
 
-    // AI turn if needed
     App.ai.runIfNeeded();
   }
 
@@ -445,7 +465,7 @@ App.flow = (function(){
     const i = S.pending.cardIdx;
     const ship = p.ships.find(s=>s.id===shipId && s.alive);
     if(!ship) return;
-    ship.flagship=true; if(ship.engine<5) ship.engine=5;
+    ship.flagship=true; if(ship.engine<5) { ship._clubs.push(5); C.recomputeStats(ship); }
     p.hand.splice(i,1);
     log(`${p.name} crowns ${ship.name}. Engine ≥ 5.`,"good");
     S.phase="idle"; S.pending=null; markActionUsed(); Rn.render(); checkWin(); App.ai.runIfNeeded();
@@ -468,10 +488,9 @@ App.flow = (function(){
       return;
     }
 
-    // Build flow
     if(S.phase!=="build_pick" && S.phase!=="build_target"){ beginBuild(); }
 
-    // If first of a pair (♣ or ♥)
+    // If first of a pair (♣ or ♥) for launching
     if(card.suit==="C" || card.suit==="H"){
       if(S.pending.firstIdx===null){
         S.pending.firstIdx = cardIdx;
@@ -544,10 +563,12 @@ App.flow = (function(){
 
     const nid = `${p.id===0?"p1":"p2"}n${Date.now()%100000}`;
     const newShip = {
-      id:nid, name:`${p.name} New Ship`, engine:club.rank, hull:heart.rank,
-      shieldRating:0, shieldActive:false, shieldCooldown:0,
-      weapons:[], weaponsInactiveTurns:0, alive:true, flagship:false, reflect:false
+      id:nid, name:`${p.name} New Ship`,
+      engine:0, hull:0, shieldRating:0, shieldActive:false, shieldCooldown:0,
+      weapons:[], weaponsInactiveTurns:0, alive:true, flagship:false, reflect:false,
+      _clubs:[club.rank], _hearts:[heart.rank], _diamonds:[], _spades:[]
     };
+    C.recomputeStats(newShip);
     p.ships.push(newShip);
 
     [a,b].sort((x,y)=>y-x).forEach(i=>p.hand.splice(i,1));
@@ -568,22 +589,42 @@ App.flow = (function(){
     const ship = p.ships.find(s=>s.id===shipId);
     if(!card || !ship){ S.history.pop(); return; }
 
+    C.ensureSuitArrays(ship);
+
     if(!C.canApplyCardToShip(card, ship, p.id)){
       Rn.setHint("That card can't be installed on that ship.");
       S.history.pop();
       return;
     }
 
-    if(card.suit==="C"){ ship.engine=Math.max(ship.engine, card.rank); p.hand.splice(cardIdx,1); log(`${p.name} upgrades Engine on ${ship.name} → ${ship.engine}.`); }
-    else if(card.suit==="H"){ ship.hull+=card.rank; p.hand.splice(cardIdx,1); log(`${p.name} adds ${card.rank} Hull to ${ship.name}.`); }
-    else if(card.suit==="D"){
-      ship.shieldRating = Math.max(ship.shieldRating, card.rank);
-      ship.shieldActive = true; ship.shieldCooldown = 0;
+    // ----- Stacking rule implementations by suit -----
+    if(card.suit==="C"){            // Engines: base=max, +1 per extra ♣
+      ship._clubs.push(card.rank);
+      C.recomputeStats(ship);
+      p.hand.splice(cardIdx,1);
+      log(`${p.name} upgrades Engine on ${ship.name} → ${ship.engine} (stacking).`);
+    }
+    else if(card.suit==="H"){       // Hull: base=max, +1 per extra ♥ (increase current hull by delta)
+      const before = C.suitTotal(ship._hearts);
+      ship._hearts.push(card.rank);
+      const after  = C.suitTotal(ship._hearts);
+      const delta  = Math.max(0, after - before);
+      ship.hull += delta;
+      C.recomputeStats(ship); // keeps coherence
+      p.hand.splice(cardIdx,1);
+      log(`${p.name} reinforces Hull on ${ship.name} (+${delta}) → H${ship.hull}.`);
+    }
+    else if(card.suit==="D"){       // Shields: base=max, +1 per extra ♦ ; re-activate on install
+      ship._diamonds.push(card.rank);
+      C.recomputeStats(ship);
+      ship.shieldActive = ship.shieldRating>0;
+      ship.shieldCooldown = 0;
       p.hand.splice(cardIdx,1);
       log(`${p.name} sets Shield ${ship.shieldRating} on ${ship.name} (active).`);
     }
-    else if(card.suit==="S"){
-      ship.weapons.push(card.rank);
+    else if(card.suit==="S"){       // Weapons: base=max, +1 per extra ♠ (damage calc uses stacking)
+      ship._spades.push(card.rank);
+      ship.weapons = [...ship._spades];
       p.hand.splice(cardIdx,1);
       log(`${p.name} installs weapon ${card.rank}♠ on ${ship.name}.`);
     }
@@ -599,7 +640,7 @@ App.flow = (function(){
 
     if(card.suit==="JOKER"){
       const tgt = o.ships.find(s=>s.id===targetId && s.alive);
-      if(!tgt || tgt.weapons.length===0){ S.history.pop(); return; }
+      if(!tgt || (tgt._spades||tgt.weapons).length===0){ S.history.pop(); return; }
       tgt.weaponsInactiveTurns = Math.max(tgt.weaponsInactiveTurns, 1);
       p.hand.splice(pend.cardIdx,1);
       log(`${p.name} plays Joker: ${o.name}'s ${tgt.name} weapons go inactive for 1 turn.`,"warn");
