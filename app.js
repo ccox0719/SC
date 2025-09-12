@@ -66,7 +66,6 @@ App.state = {
 (function(Core){
   const S = App.state, U = App.util;
 
-  // stacking: largest value is the base, each additional card of same suit = +1
   function suitTotal(arr){
     if(!arr || arr.length===0) return 0;
     let max = 0;
@@ -76,22 +75,19 @@ App.state = {
 
   function ensureSuitArrays(ship){
     ship._clubs    = ship._clubs    || (ship.engine>0        ? [ship.engine] : []);
-    ship._hearts   = ship._hearts   || (ship.hull>0          ? [ship.hull]   : []);
+    ship._hearts   = ship._hearts   || (ship.maxHull>0       ? [ship.maxHull] : (ship.hull>0 ? [ship.hull] : []));
     ship._diamonds = ship._diamonds || (ship.shieldRating>0  ? [ship.shieldRating] : []);
     ship._spades   = ship._spades   || (Array.isArray(ship.weapons) ? [...ship.weapons] : []);
+    if (ship.maxHull == null) ship.maxHull = suitTotal(ship._hearts);
     return ship;
   }
 
-  // Recompute effective stats from suit arrays
+  // Recompute effective stats from suit arrays (no healing here)
   function recomputeStats(ship){
     ensureSuitArrays(ship);
     ship.engine       = suitTotal(ship._clubs);
-
-    // Treat hull as current pool that grows when max grows
-    const cur   = ship.hull;
-    const newMx = suitTotal(ship._hearts);
-    if (newMx > cur) ship.hull += (newMx - cur);
-
+    ship.maxHull      = suitTotal(ship._hearts);
+    if (ship.hull > ship.maxHull) ship.hull = ship.maxHull;   // clamp only
     ship.shieldRating = suitTotal(ship._diamonds);
     ship.weapons      = [...ship._spades];
     return ship;
@@ -108,8 +104,7 @@ App.state = {
     ensureSuitArrays(ship);
     const E=ship.engine, H=ship.hull;
     if(ship.weapons.length===0 || E===H) return "Support";
-    if(E>H) return "Speed";
-    return "Tank";
+    return (E>H) ? "Speed" : "Tank";
   };
 
   Core.usableWeapons = function(ship){
@@ -137,7 +132,7 @@ App.state = {
       const absorbed = Math.min(amount, target.shieldRating);
       amount -= absorbed; dealt += absorbed;
       target.shieldActive = false;
-      target.shieldCooldown = 1; // 1 owner-turn cooldown
+      target.shieldCooldown = 1;
       const el = document.querySelector(`[data-sid="${target.id}"] .shieldArc`);
       if(el){ el.classList.remove('ping'); void el.offsetWidth; el.classList.add('ping'); }
     }
@@ -164,14 +159,14 @@ App.state = {
       const s = ensureSuitArrays(s0);
       if(s.alive && s.shieldCooldown>0){ s.shieldCooldown -= 1; if(s.shieldCooldown===0) s.shieldActive = true; }
       if(s.alive && s.weaponsInactiveTurns>0){ s.weaponsInactiveTurns -= 1; }
-      recomputeStats(s);
+      recomputeStats(s); // safe: no healing
     }
   };
 
   Core.canApplyCardToShip = function(card, ship, ownerId){
     ensureSuitArrays(ship);
     if(!ship.alive) return false;
-    if(ownerId!==App.state.turn) return false; // own ships only during your turn
+    if(ownerId!==App.state.turn) return false;
     if(card.suit==="C" || card.suit==="H" || card.suit==="D") return true;
     if(card.suit==="S" && card.rank>=2 && card.rank<=10) return card.rank <= ship.engine;
     return false;
@@ -179,13 +174,11 @@ App.state = {
 
   Core.eligibleBuildTargets = (player, card)=> player.ships.filter(s=> Core.canApplyCardToShip(card, s, player.id) );
 
-  // expose internals
   Core.ensureSuitArrays = ensureSuitArrays;
   Core.recomputeStats   = recomputeStats;
   Core.suitTotal        = suitTotal;
 
 })(App.core = App.core || {});
-/*========[ /SECTION ]========*/
 /*========[ /SECTION ]========*/
 
 /*========[ SECTION: RENDER (public, read-only) ]========*/
