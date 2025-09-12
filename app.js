@@ -62,407 +62,130 @@ App.state = {
 /*========[ /SECTION ]========*/
 
 
-/*========[ SECTION: FLOW / ACTIONS (public) ]========*/
-App.flow = (function(){
-  const S=App.state, U=App.util, C=App.core, Rn=App.render, D=App.dom;
+/*========[ SECTION: CORE HELPERS (pure) ]========*/
+(function(Core){
+  const S = App.state, U = App.util;
 
-  function me(){ return S.players[S.turn]; }
-  function opp(){ return S.players[1-S.turn]; }
-
-  function snapshot(){
-    S.history.push(U.deep({
-      deck:S.deck, players:S.players, turn:S.turn, phase:S.phase, pending:S.pending,
-      log:S.log, turnActionUsed:S.turnActionUsed
-    }));
-    if(S.history.length>80) S.history.shift();
-  }
-  function undo(){
-    const snap = S.history.pop(); if(!snap) return;
-    Object.assign(S, U.deep(snap));
-    Rn.render();
-  }
-  function log(){ return Rn.log.apply(null, arguments); }
-
-  function draw(p, n){
-    const take = S.deck.splice(-n);
-    p.hand.push(...take);
-    if(take.length>0) log(`${p.name} draws ${take.length} card${take.length>1?"s":""}.`);
+  // stacking: largest value is the base, each additional card of same suit = +1
+  function suitTotal(arr){
+    if(!arr || arr.length===0) return 0;
+    let max = 0;
+    for (const v of arr) if (v > max) max = v;
+    return max + (arr.length - 1);
   }
 
-  function startOfTurnDraw(p){
-    C.startOfOwnerTurnMaintenance(p);
-    let n = 1;
-    if(p.id===1 && !p.drewTwo){ n=2; p.drewTwo=true; }
-    draw(p, n);
+  function ensureSuitArrays(ship){
+    ship._clubs    = ship._clubs    || (ship.engine>0        ? [ship.engine] : []);
+    ship._hearts   = ship._hearts   || (ship.hull>0          ? [ship.hull]   : []);
+    ship._diamonds = ship._diamonds || (ship.shieldRating>0  ? [ship.shieldRating] : []);
+    ship._spades   = ship._spades   || (Array.isArray(ship.weapons) ? [...ship.weapons] : []);
+    return ship;
   }
 
-  function checkDeckOut(){
-    if(S.deck.length===0){
-      const p0=S.players[0], p1=S.players[1];
-      const t0=C.totalHP(p0), t1=C.totalHP(p1);
-      if(t0!==t1){
-        const w = t0>t1 ? p0.name : p1.name;
-        log(`Deck out → ${w} wins by totals (${t0} vs ${t1}).`,"good");
-        freeze(); return true;
-      }else{
-        log(`Deck out: equal totals (${t0}). Continue until a Flagship falls.`,"muted");
-      }
+  // Recompute effective stats from suit arrays
+  function recomputeStats(ship){
+    ensureSuitArrays(ship);
+    ship.engine       = suitTotal(ship._clubs);
+
+    // Treat hull as current pool that grows when max grows
+    const cur   = ship.hull;
+    const newMx = suitTotal(ship._hearts);
+    if (newMx > cur) ship.hull += (newMx - cur);
+
+    ship.shieldRating = suitTotal(ship._diamonds);
+    ship.weapons      = [...ship._spades];
+    return ship;
+  }
+
+  Core.guaranteeAce = function(hand, deck){
+    if(!hand.some(c=>c.rank===1)){
+      const idx = deck.findIndex(c=>c.rank===1 && c.suit!=="JOKER");
+      if(idx>=0){ hand.push(deck.splice(idx,1)[0]); }
     }
-    return false;
-  }
-
-  function freeze(){ document.querySelectorAll("button").forEach(b=>b.disabled=true); }
-  function checkWin(){
-    const p0=S.players[0], p1=S.players[1];
-    if(C.flagshipDestroyed(p0)){ log("Player 2 wins (Player 1 Flagship destroyed).","good"); freeze(); }
-    if(C.flagshipDestroyed(p1)){ log("Player 1 wins (Player 2 Flagship destroyed).","good"); freeze(); }
-  }
-
-  function actionGate(){ 
-    if(S.turnActionUsed){ 
-      Rn.setHint("You’ve already used your one action this turn. End Turn to proceed."); 
-      return true; 
-    }
-    return false;
-  }
-  function markActionUsed(){ S.turnActionUsed = true; }
-
-  // ---- helper to seed ships with suit stacks; safe if recomputeStats missing ----
-  function seedShip(base){
-    const s = {
-      id: base.id, name: base.name,
-      engine: base.engine||0, hull: base.hull||0,
-      shieldRating: base.shieldRating||0, shieldActive: !!base.shieldActive, shieldCooldown:0,
-      weapons: [], weaponsInactiveTurns:0,
-      alive:true, flagship:false, reflect:false,
-      _clubs:    base.engine>0        ? [base.engine]       : [],
-      _hearts:   base.hull>0          ? [base.hull]         : [],
-      _diamonds: (base.shieldRating||0)>0 ? [base.shieldRating] : [],
-      _spades: []
-    };
-    if (C && typeof C.recomputeStats === "function") C.recomputeStats(s);
-    return s;
-  }
-
-  /* ----- Init ----- */
-  function initGame(){
-    try{
-      S.deck = U.makeDeck();
-
-      // starters
-      S.players[0].ships = [
-        seedShip({id:"p1a", name:"P1 Ship A", engine:3, hull:2, shieldRating:2, shieldActive:true}),
-        seedShip({id:"p1b", name:"P1 Ship B", engine:4, hull:5, shieldRating:0, shieldActive:false})
-      ];
-      S.players[1].ships = [
-        seedShip({id:"p2a", name:"P2 Ship A", engine:2, hull:3, shieldRating:3, shieldActive:true}),
-        seedShip({id:"p2b", name:"P2 Ship B", engine:5, hull:4, shieldRating:0, shieldActive:false})
-      ];
-
-      // hands P1:7, P2:6 (Ace guaranteed)
-      S.players[0].hand = S.deck.splice(-7); App.core.guaranteeAce(S.players[0].hand, S.deck);
-      S.players[1].hand = S.deck.splice(-6); App.core.guaranteeAce(S.players[1].hand, S.deck);
-
-      S.turn = 0;
-      S.players[0].drewTwo = true;  // P2 draws 2 on first turn
-      S.players[1].drewTwo = false;
-
-      S.log = [];
-      S.phase = "idle";
-      S.pending = null;
-      S.history = [];
-      S.turnActionUsed = false;
-
-      log(`Game started. Player 1 begins. Player 2 will draw 2 on their first turn.`);
-      startOfTurnDraw(S.players[0]);
-      Rn.render();
-    } catch (e){
-      console.error("[initGame] failed:", e);
-      Rn.log("Init error: "+e.message, "bad");
-      // keep UI usable even if something failed
-    }
-  }
-
-  /* ----- Turn Flow ----- */
-  function endTurn(){
-    snapshot();
-    if(checkDeckOut()) return;
-
-    S.turn = 1-S.turn;
-    S.phase = "idle"; S.pending=null;
-    S.turnActionUsed = false;
-
-    const p = S.players[S.turn];
-    startOfTurnDraw(p);
-    checkWin();
-    Rn.render();
-
-    App.ai.runIfNeeded();
-  }
-
-  /* ----- Top-level Actions ----- */
-  function beginBuild(){
-    if(actionGate()) return;
-    S.phase="build_pick";
-    S.pending={type:"build", firstIdx:null, selectedIdx:null, pairIdx:null};
-    Rn.setHint("Build: tap a card (♣ Engine, ♥ Hull, ♦ Shield, ♠ Weapon ≤ Engine). Tap ♣ then ♥ (or vice versa) to LAUNCH a new ship.");
-    Rn.render();
-  }
-  function beginAttack(){ if(actionGate()) return; S.phase="attack_select_attacker"; S.pending={type:"attack"}; Rn.setHint("Attack: select your attacking ship (must have weapons)."); Rn.render(); }
-  function beginCrown(){
-    if(actionGate()) return;
-    const p = me();
-    const idx = p.hand.findIndex(c=>c.rank===1 && c.suit!=="JOKER");
-    if(idx<0){ Rn.setHint("You have no Ace."); return; }
-    S.phase="crown_select_ship"; S.pending={type:"crown", cardIdx:idx};
-    Rn.setHint("Select a ship to crown (Engine becomes at least 5)."); Rn.render();
-  }
-  function applyCrown(shipId){
-    snapshot();
-    const p = me();
-    const i = S.pending.cardIdx;
-    const ship = p.ships.find(s=>s.id===shipId && s.alive);
-    if(!ship) return;
-    ship.flagship=true; if(ship.engine<5) { ship._clubs.push(5); if (C.recomputeStats) C.recomputeStats(ship); }
-    p.hand.splice(i,1);
-    log(`${p.name} crowns ${ship.name}. Engine ≥ 5.`,"good");
-    S.phase="idle"; S.pending=null; markActionUsed(); Rn.render(); checkWin(); App.ai.runIfNeeded();
-  }
-
-  /* ----- Build Selection / Launch Pair ----- */
-  function handleBuildSelectCard(cardIdx){
-    const p = me();
-    const card = p.hand[cardIdx];
-    if(!card) return;
-
-    // Specials / Joker → target phase
-    if(card.suit==="JOKER" || (card.suit==="S" && [11,12,13].includes(card.rank))){
-      S.phase="special_target"; S.pending={type:"special", cardIdx, card};
-      if(card.suit==="JOKER") Rn.setHint("Joker: select an enemy ship with weapons (they go inactive for 1 turn).");
-      else if(card.rank===11) Rn.setHint("J♠: select any enemy ship (3 Hull, bypass Shields).");
-      else if(card.rank===12) Rn.setHint("Q♠: select your ship for reflect (≤5 on its next attack).");
-      else if(card.rank===13) Rn.setHint("K♠: select any enemy ship (7 Hull, bypass Shields).");
-      Rn.render();
-      return;
-    }
-
-    if(S.phase!=="build_pick" && S.phase!=="build_target"){ beginBuild(); }
-
-    // If first of a pair (♣ or ♥) for launching
-    if(card.suit==="C" || card.suit==="H"){
-      if(S.pending.firstIdx===null){
-        S.pending.firstIdx = cardIdx;
-        S.pending.selectedIdx = cardIdx;
-        S.phase = "build_target";
-        const need = (card.suit==="C") ? "♥" : "♣";
-        Rn.setHint(`Selected ${U.lbl(card)}. Tap a highlighted ship to install, or select a ${need} to LAUNCH a new ship.`);
-        Rn.render();
-        return;
-      }else{
-        const first = p.hand[S.pending.firstIdx];
-        const suits = [first.suit, card.suit].sort().join("");
-        if(suits==="CH" && cardIdx!==S.pending.firstIdx){
-          S.pending.pairIdx = cardIdx;
-          S.pending.selectedIdx = null;
-          S.phase = "launch_pair";
-          Rn.setHint("Launch ready: press **Confirm Launch**.");
-          Rn.render();
-          return;
-        }else{
-          S.pending.firstIdx = cardIdx;
-          S.pending.selectedIdx = cardIdx;
-          S.pending.pairIdx = null;
-          S.phase = "build_target";
-          const need2 = (card.suit==="C") ? "♥" : "♣";
-          Rn.setHint(`Selected ${U.lbl(card)}. Tap a highlighted ship to install, or select a ${need2} to LAUNCH a new ship.`);
-          Rn.render();
-          return;
-        }
-      }
-    }
-
-    // For ♦ or normal ♠ (2–10): just go to target
-    S.pending.selectedIdx = cardIdx;
-    S.phase = "build_target";
-
-    const targets = C.eligibleBuildTargets(me(), card);
-    if(targets.length===0){
-      if(card.suit==="S"){
-        const engines = me().ships.filter(s=>s.alive).map(s=>s.engine);
-        const maxE = engines.length ? Math.max(...engines) : 0;
-        Rn.setHint(`No valid targets for ${U.lbl(card)}. Highest Engine is ${maxE}. Upgrade ♣ first or pick another card.`);
-      }else{
-        Rn.setHint(`No valid targets: build only on your living ships.`);
-      }
-    }else{
-      Rn.setHint(`Build: tap a **highlighted** ship to install ${U.lbl(card)}.`);
-    }
-    Rn.render();
-  }
-
-  function confirmLaunch(){
-    const p = me();
-    const pend = S.pending;
-    if(S.phase!=="launch_pair" || !Number.isInteger(pend?.firstIdx) || !Number.isInteger(pend?.pairIdx)) return;
-
-    snapshot();
-
-    const a = pend.firstIdx, b = pend.pairIdx;
-    const cA = p.hand[a], cB = p.hand[b];
-    const club = (cA.suit==="C") ? cA : cB;
-    const heart = (cB.suit==="H") ? cB : cA;
-    if(!(club && heart)){ S.history.pop(); return; }
-
-    const aliveCount = p.ships.filter(s=>s.alive).length;
-    if(aliveCount >= S.maxFleet && !p.ships.some(s=>!s.alive)){
-      Rn.setHint(`Fleet is full (cap ${S.maxFleet}). Destroy a ship first or install instead.`);
-      S.history.pop(); return;
-    }
-
-    const nid = `${p.id===0?"p1":"p2"}n${Date.now()%100000}`;
-    const newShip = {
-      id:nid, name:`${p.name} New Ship`,
-      engine:0, hull:0, shieldRating:0, shieldActive:false, shieldCooldown:0,
-      weapons:[], weaponsInactiveTurns:0, alive:true, flagship:false, reflect:false,
-      _clubs:[club.rank], _hearts:[heart.rank], _diamonds:[], _spades:[]
-    };
-    if (C.recomputeStats) C.recomputeStats(newShip);
-    p.ships.push(newShip);
-
-    [a,b].sort((x,y)=>y-x).forEach(i=>p.hand.splice(i,1));
-
-    log(`${p.name} launches a new ship (E:${club.rank} H:${heart.rank}).`,"good");
-    S.phase="idle"; S.pending=null; markActionUsed(); Rn.render(); App.ai.runIfNeeded();
-  }
-
-  function applyBuildToShip(shipId){
-    if(S.phase==="launch_pair"){ confirmLaunch(); return; }
-    if(S.phase!=="build_target" || S.pending?.selectedIdx==null) return;
-
-    snapshot();
-
-    const p = me(); 
-    const cardIdx = S.pending.selectedIdx;
-    const card = p.hand[cardIdx];
-    const ship = p.ships.find(s=>s.id===shipId);
-    if(!card || !ship){ S.history.pop(); return; }
-
-    C.ensureSuitArrays(ship);
-
-    if(!C.canApplyCardToShip(card, ship, p.id)){
-      Rn.setHint("That card can't be installed on that ship.");
-      S.history.pop();
-      return;
-    }
-
-    if(card.suit==="C"){            // Engines
-      ship._clubs.push(card.rank);
-      if (C.recomputeStats) C.recomputeStats(ship);
-      p.hand.splice(cardIdx,1);
-      log(`${p.name} upgrades Engine on ${ship.name} → ${ship.engine} (stacking).`);
-    }
-    else if(card.suit==="H"){       // Hull
-      const before = C.suitTotal(ship._hearts);
-      ship._hearts.push(card.rank);
-      const after  = C.suitTotal(ship._hearts);
-      const delta  = Math.max(0, after - before);
-      ship.hull += delta;
-      if (C.recomputeStats) C.recomputeStats(ship);
-      p.hand.splice(cardIdx,1);
-      log(`${p.name} reinforces Hull on ${ship.name} (+${delta}) → H${ship.hull}.`);
-    }
-    else if(card.suit==="D"){       // Shields
-      ship._diamonds.push(card.rank);
-      if (C.recomputeStats) C.recomputeStats(ship);
-      ship.shieldActive = ship.shieldRating>0;
-      ship.shieldCooldown = 0;
-      p.hand.splice(cardIdx,1);
-      log(`${p.name} sets Shield ${ship.shieldRating} on ${ship.name} (active).`);
-    }
-    else if(card.suit==="S"){       // Weapons
-      ship._spades.push(card.rank);
-      ship.weapons = [...ship._spades];
-      p.hand.splice(cardIdx,1);
-      log(`${p.name} installs weapon ${card.rank}♠ on ${ship.name}.`);
-    }
-
-    S.phase="idle"; S.pending=null; markActionUsed(); Rn.render(); App.ai.runIfNeeded();
-  }
-
-  /* ----- Specials ----- */
-  function applySpecialOn(targetId){
-    snapshot();
-    const p = me(), o = opp(); const pend = S.pending; if(!pend) return;
-    const card = p.hand[pend.cardIdx]; if(!card) { S.history.pop(); return; }
-
-    if(card.suit==="JOKER"){
-      const tgt = o.ships.find(s=>s.id===targetId && s.alive);
-      if(!tgt || (tgt._spades||tgt.weapons).length===0){ S.history.pop(); return; }
-      tgt.weaponsInactiveTurns = Math.max(tgt.weaponsInactiveTurns, 1);
-      p.hand.splice(pend.cardIdx,1);
-      log(`${p.name} plays Joker: ${o.name}'s ${tgt.name} weapons go inactive for 1 turn.`,"warn");
-    }else if(card.suit==="S" && card.rank===11){
-      const tgt = o.ships.find(s=>s.id===targetId && s.alive);
-      if(!tgt){ S.history.pop(); return; }
-      tgt.hull -= 3; if(tgt.hull<=0){tgt.hull=0; tgt.alive=false;}
-      p.hand.splice(pend.cardIdx,1);
-      log(`${p.name} plays J♠: 3 Hull to ${tgt.name} (bypass).`,"bad");
-    }else if(card.suit==="S" && card.rank===12){
-      const my = p.ships.find(s=>s.id===targetId && s.alive);
-      if(!my){ S.history.pop(); return; }
-      my.reflect = true; p.hand.splice(pend.cardIdx,1);
-      log(`${p.name} plays Q♠: ${my.name} will reflect up to 5 on its next attack.`,"good");
-    }else if(card.suit==="S" && card.rank===13){
-      const tgt = o.ships.find(s=>s.id===targetId && s.alive);
-      if(!tgt){ S.history.pop(); return; }
-      tgt.hull -= 7; if(tgt.hull<=0){tgt.hull=0; tgt.alive=false;}
-      p.hand.splice(pend.cardIdx,1);
-      log(`${p.name} plays K♠: 7 Hull to ${tgt.name} (bypass).`,"bad");
-    }else{
-      S.history.pop(); return;
-    }
-
-    S.phase="idle"; S.pending=null; markActionUsed(); Rn.render(); checkWin(); App.ai.runIfNeeded();
-  }
-
-  /* ----- Attack ----- */
-  function selectAttacker(shipId){
-    if(S.turnActionUsed){ Rn.setHint("You’ve already used your one action this turn."); return; }
-    const p = me();
-    const sh = p.ships.find(s=>s.id===shipId && s.alive);
-    if(!sh) return;
-    const dmg = C.shipDamage(sh);
-    if(dmg<=0){ Rn.setHint("That ship has no usable weapons."); return; }
-    S.phase="attack_select_target"; S.pending={type:"attack", attackerId: shipId, dmg};
-    Rn.setHint(`Attack: select an enemy target (damage = ${dmg}).`); Rn.render();
-  }
-  function performAttackOn(targetId){
-    snapshot();
-    const p=me(), o=opp(); const pend=S.pending; if(!pend) return;
-    const atk = p.ships.find(s=>s.id===pend.attackerId && s.alive);
-    const tgt = o.ships.find(s=>s.id===targetId && s.alive);
-    if(!atk || !tgt){ S.history.pop(); return; }
-    const dmg = C.shipDamage(atk);
-    C.applyDamage(tgt, dmg, {bypassShields:false});
-    log(`${p.name} attacks with ${atk.name} for ${dmg} → ${o.name}'s ${tgt.name} ${tgt.alive?`(H${tgt.hull} Sh${tgt.shieldActive? tgt.shieldRating:0})`:"destroyed!"}`, tgt.alive?"":"bad");
-
-    if(atk.reflect){
-      const ref = Math.min(5, dmg);
-      C.applyDamage(atk, ref, {bypassShields:false});
-      log(`Reflect triggers on ${atk.name}: takes ${ref}.`,"muted");
-      atk.reflect=false;
-    }
-
-    S.phase="idle"; S.pending=null; markActionUsed(); Rn.render(); checkWin(); App.ai.runIfNeeded();
-  }
-
-  return {
-    initGame, endTurn, beginBuild, beginAttack, beginCrown, applyCrown,
-    handleBuildSelectCard, confirmLaunch, applyBuildToShip,
-    applySpecialOn, selectAttacker, performAttackOn,
-    undo
   };
-})();
+
+  Core.roleOf = function(ship){
+    ensureSuitArrays(ship);
+    const E=ship.engine, H=ship.hull;
+    if(ship.weapons.length===0 || E===H) return "Support";
+    if(E>H) return "Speed";
+    return "Tank";
+  };
+
+  Core.usableWeapons = function(ship){
+    ensureSuitArrays(ship);
+    if(ship.weaponsInactiveTurns>0) return [];
+    return ship.weapons.filter(v=>v<=ship.engine);
+  };
+
+  Core.shipDamage = function(ship){
+    ensureSuitArrays(ship);
+    const w = Core.usableWeapons(ship);
+    if(w.length===0) return Core.roleOf(ship)==="Speed" ? 2 : 0;
+    const base  = Math.max(...w);
+    const stack = w.length-1;
+    let dmg = base + stack;
+    if(Core.roleOf(ship)==="Speed") dmg += 2;
+    return Math.max(0,dmg);
+  };
+
+  Core.applyDamage = function(target, amount, {bypassShields=false}={}){
+    if(!target || !target.alive) return 0;
+    ensureSuitArrays(target);
+    let dealt = 0;
+    if(!bypassShields && target.shieldActive && target.shieldRating>0 && amount>0){
+      const absorbed = Math.min(amount, target.shieldRating);
+      amount -= absorbed; dealt += absorbed;
+      target.shieldActive = false;
+      target.shieldCooldown = 1; // 1 owner-turn cooldown
+      const el = document.querySelector(`[data-sid="${target.id}"] .shieldArc`);
+      if(el){ el.classList.remove('ping'); void el.offsetWidth; el.classList.add('ping'); }
+    }
+    if(amount>0){
+      target.hull -= amount;
+      dealt += amount;
+      if(target.hull<=0){ target.hull=0; target.alive=false; }
+    }
+    return dealt;
+  };
+
+  Core.totalHP = (p)=> U.sum(p.ships.filter(s=>s.alive).map(s=> s.hull + (s.shieldActive ? s.shieldRating : 0)));
+  Core.flagshipDestroyed = (p)=> p.ships.some(s=>s.flagship) && !p.ships.some(s=>s.flagship && s.alive);
+
+  Core.weakestEnemyShip = function(pid){
+    const opp = S.players[1-pid];
+    const alive = opp.ships.filter(s=>s.alive);
+    alive.sort((a,b)=>(a.hull+(a.shieldActive?a.shieldRating:0))-(b.hull+(b.shieldActive?b.shieldRating:0)) || a.engine-b.engine);
+    return alive[0] || null;
+  };
+
+  Core.startOfOwnerTurnMaintenance = function(p){
+    for(const s0 of p.ships){
+      const s = ensureSuitArrays(s0);
+      if(s.alive && s.shieldCooldown>0){ s.shieldCooldown -= 1; if(s.shieldCooldown===0) s.shieldActive = true; }
+      if(s.alive && s.weaponsInactiveTurns>0){ s.weaponsInactiveTurns -= 1; }
+      recomputeStats(s);
+    }
+  };
+
+  Core.canApplyCardToShip = function(card, ship, ownerId){
+    ensureSuitArrays(ship);
+    if(!ship.alive) return false;
+    if(ownerId!==App.state.turn) return false; // own ships only during your turn
+    if(card.suit==="C" || card.suit==="H" || card.suit==="D") return true;
+    if(card.suit==="S" && card.rank>=2 && card.rank<=10) return card.rank <= ship.engine;
+    return false;
+  };
+
+  Core.eligibleBuildTargets = (player, card)=> player.ships.filter(s=> Core.canApplyCardToShip(card, s, player.id) );
+
+  // expose internals
+  Core.ensureSuitArrays = ensureSuitArrays;
+  Core.recomputeStats   = recomputeStats;
+  Core.suitTotal        = suitTotal;
+
+})(App.core = App.core || {});
+/*========[ /SECTION ]========*/
 /*========[ /SECTION ]========*/
 
 /*========[ SECTION: RENDER (public, read-only) ]========*/
