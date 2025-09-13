@@ -1,14 +1,17 @@
-/* FILE_ID: SFB/app v1.1.1 */
+/* FILE_ID: SFB/app v1.2.0 */
 import { ID, CLASSN, QS } from "./ids.js";
 
 /*==========================================================
-  Space Fleet Battle — Engine + UI (Starting Lineup enabled)
+  Space Fleet Battle — Engine + UI (No-Flagship-Win Variant)
   - Full rules engine
   - Hotseat 2P + optional AI (Easy)
   - Undo, New Game, Deck-out
   - Starting Lineup (ships & Ace guarantee)
   - Shield cooldown = 2 turns
   - Default action = Build
+  - REMOVED: "destroy all enemy Flagships" win condition
+  - ADDED: True sudden-death after deck-out tie (first ship destroyed loses)
+  - PRIMARY WIN: Destroy all enemy ships (total annihilation) or deck-out tiebreak
 ==========================================================*/
 
 const SUITS = ["♣","♥","♦","♠"];
@@ -39,7 +42,8 @@ const S = {
     highlight:{ships:[], foeShips:[]}
   },
   flags:{
-    deckOutChecked:false
+    deckOutChecked:false,
+    suddenDeath:false   // set true if deck-out HP tie occurs
   }
 };
 
@@ -92,7 +96,7 @@ function takeFromDeck(suit, rank){
 function newShip(name="Ship"){
   return {
     name,
-    flagship:false,
+    flagship:false, // crown still marks, but has no special win condition
     stacks:{ clubs:[], hearts:[], diamonds:[], spades:[] },
     stats:{ engine:0, hullMax:0, hull:0, shield:0 },
     shieldActive:false,
@@ -162,6 +166,19 @@ function destroyShip(pid, idx){
   const ship = S.players[pid].ships[idx];
   log(`${S.players[pid].name}'s ${ship.name} destroyed.`);
   S.players[pid].ships.splice(idx,1);
+
+  // Sudden death after deck-out tie: first ship destroyed loses
+  if(S.flags.suddenDeath){
+    const winnerPid = (pid+1)%2;
+    endGame(`Sudden death: ${S.players[winnerPid].name} wins (first ship destroyed).`);
+    return;
+  }
+
+  // Primary win: total annihilation
+  if(S.players[pid].ships.length===0){
+    const winnerPid = (pid+1)%2;
+    endGame(`${S.players[winnerPid].name} wins: all enemy ships destroyed.`);
+  }
 }
 
 function totalHPWithShield(pid){
@@ -293,6 +310,7 @@ function startGame(){
   S.drawBoostP2 = true;
   S.history.length = 0;
   S.flags.deckOutChecked = false;
+  S.flags.suddenDeath = false;
 
   // --- Starting Lineup (consume exact cards from the deck first) ---
   // Player 1
@@ -423,12 +441,7 @@ function performAttack(attackerIdx, defenderPid, defenderIdx){
   log(`${me.name}'s ${atk.name} attacks ${S.players[defenderPid].name}'s ${target.name} for ${dmg} (${dmg-remaining} absorbed).`);
 
   if(target.stats.hull<=0){
-    const wasFlag = target.flagship;
-    destroyShip(defenderPid, defenderIdx);
-    if(wasFlag){
-      const foeFlags = S.players[(S.turn+1)%2].ships.some(s=>s.flagship);
-      if(!foeFlags){ endGame(`${me.name} wins: all enemy Flagships destroyed.`); return; }
-    }
+    destroyShip(defenderPid, defenderIdx); // total-annihilation / sudden-death handled inside
   }
 
   finishAction();
@@ -442,7 +455,7 @@ function performCrown(cardIdx, shipIdx){
   pushHistory();
 
   const ship = me.ships[shipIdx];
-  ship.flagship = true;
+  ship.flagship = true; // marker only (no instant-loss rule)
 
   const eng = stackValue(ship.stacks.clubs);
   if(eng < 5){
@@ -484,12 +497,7 @@ function performSpecial(cardIdx, targetPid, targetShipIdx, ownShipIdxForQ){
       target.stats.hull -= 3;
       log(`${me.name} plays J♠: ${target.name} takes 3 bypass.`);
       if(target.stats.hull<=0){
-        const wasFlag = target.flagship;
-        destroyShip(targetPid, targetShipIdx);
-        if(wasFlag){
-          const foeFlags = S.players[(S.turn+1)%2].ships.some(s=>s.flagship);
-          if(!foeFlags){ endGame(`${me.name} wins: all enemy Flagships destroyed.`); return; }
-        }
+        destroyShip(targetPid, targetShipIdx); // no flagship-loss rule
       }
       me.hand.splice(cardIdx,1);
       return finishAction();
@@ -501,12 +509,7 @@ function performSpecial(cardIdx, targetPid, targetShipIdx, ownShipIdxForQ){
       target.stats.hull -= 7;
       log(`${me.name} plays K♠: ${target.name} takes 7 bypass.`);
       if(target.stats.hull<=0){
-        const wasFlag = target.flagship;
-        destroyShip(targetPid, targetShipIdx);
-        if(wasFlag){
-          const foeFlags = S.players[(S.turn+1)%2].ships.some(s=>s.flagship);
-          if(!foeFlags){ endGame(`${me.name} wins: all enemy Flagships destroyed.`); return; }
-        }
+        destroyShip(targetPid, targetShipIdx); // no flagship-loss rule
       }
       me.hand.splice(cardIdx,1);
       return finishAction();
@@ -564,7 +567,9 @@ function checkDeckOutWin(){
   if(a>b){ endGame(`Deck-out: ${S.players[0].name} wins on HP (${a} vs ${b}).`); return; }
   if(b>a){ endGame(`Deck-out: ${S.players[1].name} wins on HP (${b} vs ${a}).`); return; }
 
-  log("Deck-out tie: sudden death — first Flagship destroyed loses.");
+  // True sudden-death: first ship destroyed loses
+  S.flags.suddenDeath = true;
+  log("Deck-out tie: sudden death — first ship destroyed loses.");
 }
 
 /* -----------------------
@@ -595,7 +600,7 @@ function shipNode(ship, pid, sidx){
   const header = el.querySelector(".shipHeader .name");
   header.textContent = ship.name;
 
-  if(ship.flagship) el.classList.add("flag");
+  if(ship.flagship) el.classList.add("flag"); // still marked visually
 
   el.querySelector(".hullVal").textContent = `${Math.max(0,ship.stats.hull)}/${ship.stats.hullMax}`;
   el.querySelector(".engVal").textContent = ship.stats.engine;
