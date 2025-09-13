@@ -1,300 +1,95 @@
-/* =========================================================
-   Space Fleet Battle — Mobile-first, Sleek UI
-   Works with your current HTML/JS structure.
-   ========================================================= */
-
-/* ---------- Theme ---------- */
-:root {
-  --p1: #5aa1ff;      /* Player 1 accent */
-  --p2: #ff6fb0;      /* Player 2 accent */
-  --bg: #0b0f16;
-  --panel: #121824;
-  --panel-2: #0f1520;
-  --text: #e6ecf3;
-  --muted: #9aa6b2;
-  --border: #223045;
-  --accent: #ffbf4d;
-
-  --good: #36d07f;
-  --bad:  #ff6b6b;
-  --warn: #ffcc4d;
-
-  --chip: #1a2433;
-  --chip-2: #202b3d;
-
-  --radius: 12px;
-  --radius-sm: 10px;
-
-  --iphone-safe-top: env(safe-area-inset-top, 0);
-  --iphone-safe-bottom: env(safe-area-inset-bottom, 0);
+:root{
+  --bg:#0b0f19;
+  --panel:#121826;
+  --ink:#e6ebff;
+  --muted:#9fb1ff;
+  --accent:#5aa9ff;
+  --danger:#ff6b6b;
+  --ok:#17c964;
+  --card:#0f1523;
+  --chip:#1b2340;
 }
 
-/* System dark mode (keeps same palette) */
-@media (prefers-color-scheme: light) {
-  :root { /* keep dark theme for contrast */ }
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+
+header{padding:12px 16px;border-bottom:1px solid #1c2542;background:linear-gradient(180deg,#0d1424,#0b0f19)}
+h1{margin:0 0 8px 0;font-size:20px;letter-spacing:.5px}
+#turnBanner{display:flex;gap:12px;align-items:center;color:var(--muted);font-size:13px}
+#topControls{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+
+button{
+  background:var(--chip);color:var(--ink);border:1px solid #28345d;
+  padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:600
+}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--accent);color:#001332;border:none}
+
+main{display:grid;grid-template-columns:1fr 340px;gap:16px;padding:16px}
+@media (max-width: 980px){ main{grid-template-columns:1fr} #actions{order:-1} }
+
+#players{display:grid;gap:16px}
+.playerZone{background:var(--panel);padding:12px;border:1px solid #1c2542;border-radius:12px}
+.playerZone h2{margin:0 0 8px 0;color:var(--muted);font-weight:600;font-size:14px}
+
+.ships{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.hand{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+
+.cardlike{
+  background:var(--card);
+  border:1px solid #1c2542;border-radius:12px;padding:10px;
+  box-shadow:0 2px 8px rgba(0,0,0,.25)
 }
 
-/* ---------- Page ---------- */
-html, body {
-  margin: 0;
-  height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font: 400 16px/1.35 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -webkit-tap-highlight-color: transparent;
+.card{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:44px;height:56px;border-radius:8px;border:1px solid #31406f;
+  background:linear-gradient(180deg,#0f1830,#0d1424);
+  font-weight:700;user-select:none
 }
+.card.s-♣{color:#8ae66e}
+.card.s-♥{color:#ff9bb3}
+.card.s-♦{color:#7fd1ff}
+.card.s-♠{color:#c3b6ff}
+.card.A{border-color:#ffd86b;box-shadow:inset 0 0 0 1px #ffd86b}
+.card.royal{border-color:#ff9f6b}
 
-#app {
-  display: grid;
-  gap: 12px;
-  padding: calc(10px + var(--iphone-safe-top)) 12px calc(12px + var(--iphone-safe-bottom));
-  max-width: 980px;
-  margin: 0 auto;
-}
+.card.selected{outline:2px solid var(--accent)}
+.card.invalid{opacity:.4;filter:grayscale(1)}
+.card.clickable{cursor:pointer}
+.card.small{height:46px;min-width:38px;font-size:14px}
 
-/* ---------- Controls / HUD (sticky, compact) ---------- */
-#controlsCol {
-  position: sticky;
-  top: calc(6px + var(--iphone-safe-top));
-  z-index: 20;
-  display: grid;
-  gap: 10px;
-  background: linear-gradient(180deg, var(--panel), var(--panel-2));
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px;
-  box-shadow: 0 6px 12px rgba(0,0,0,.18);
-}
+#actions{background:var(--panel);padding:12px;border:1px solid #1c2542;border-radius:12px}
+.actionRow{display:flex;gap:6px;flex-wrap:wrap}
+#context{margin-top:10px}
+#hint{min-height:20px;color:var(--muted);font-size:13px}
+.hidden{display:none}
 
-/* Side color rail for whose turn */
-#controlsCol.controls-p1 { box-shadow: inset 3px 0 0 0 var(--p1), 0 6px 12px rgba(0,0,0,.18); }
-#controlsCol.controls-p2 { box-shadow: inset 3px 0 0 0 var(--p2), 0 6px 12px rgba(0,0,0,.18); }
+#pendingLaunch{display:flex;align-items:center;gap:8px;background:#0e1831;border:1px dashed #29407a;padding:8px;border-radius:8px}
 
-#turnPill {
-  font-weight: 700;
-  font-size: 14px;
-}
+#log{margin-top:12px;max-height:40vh;overflow:auto;background:#0e1322;border:1px solid #1c2542;border-radius:8px;padding:8px;font-size:12px;line-height:1.35}
+#log .entry{padding:4px 0;border-bottom:1px dashed #2a355c}
+#log .entry:last-child{border-bottom:none}
 
-/* Segmented actions: horizontal scrollable row */
-.controls-row {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: max-content;
-  gap: 8px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 2px;
-}
-.controls-row::-webkit-scrollbar { display: none; }
+.ship{position:relative}
+.shipHeader{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.ship .flagship{display:none;color:#ffd86b}
+.ship.flag .flagship{display:inline}
+.ship .name{color:#a9b7ff;font-weight:700}
 
-/* Buttons as modern chips */
-button {
-  background: var(--chip);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 10px 14px;
-  font: inherit;
-  font-weight: 600;
-  letter-spacing: .1px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background .12s ease, transform .04s ease, border-color .12s ease;
-}
-button:hover { background: var(--chip-2); border-color: #2c3c52; }
-button:active { transform: translateY(1px); }
-button:disabled { opacity: .5; pointer-events: none; }
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.stat{background:#0f1730;border:1px solid #24356a;border-radius:8px;padding:6px;font-weight:700}
+.stat .val{float:right}
+.stat.hull{border-color:#4e2a3a}
+.stat.engine{border-color:#2d4e2a}
+.stat.shield{border-color:#234b62}
+.stat.weapon{border-color:#4b3b62}
+.stat .down{color:var(--danger)}
+.stat .up{color:var(--ok)}
+#shieldState{margin-left:6px;font-size:11px;color:#9cc9ff}
 
-#btnConfirmLaunch { display: none; }
+.tags{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+.tag{background:#162043;border:1px solid #2b3e7d;color:#c0d3ff;font-size:11px;padding:2px 6px;border-radius:999px}
 
-/* Inline meta */
-.meta {
-  display: flex; flex-wrap: wrap; gap: 8px;
-  font-size: 13px; color: var(--muted);
-}
-.meta b { color: var(--text); }
-
-#actionHint { font-size: 13px; color: var(--muted); }
-#selectedInfo { color: var(--text); }
-
-/* Toggle / select row */
-.inline-controls {
-  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
-}
-.inline-controls label, .inline-controls select {
-  font-size: 14px; color: var(--text);
-}
-.inline-controls select {
-  background: var(--chip);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 999px;
-  padding: 8px 12px;
-}
-
-/* ---------- Battlefield ---------- */
-h2 { margin: 8px 0 0; font-size: 16px; font-weight: 700; }
-
-#board { display: grid; gap: 12px; }
-
-.side {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px;
-}
-.side > div:first-child strong.p1 { color: var(--p1); }
-.side > div:first-child strong.p2 { color: var(--p2); }
-
-/* Grid of ships */
-.ships {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-}
-
-/* Ship card */
-.ship {
-  position: relative;
-  background: linear-gradient(180deg, #151d2a 0%, #0f1723 100%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px;
-}
-.ship.dead { opacity: .45; filter: grayscale(.25); }
-.ship.hl { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* Header row */
-.shiphead {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 8px;
-}
-.shiphead h3 {
-  margin: 0; font-size: 14px; font-weight: 700; letter-spacing: .2px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 66%;
-}
-.shiphead .role {
-  font-size: 11px; color: var(--muted); background: #101623;
-  border: 1px solid #1e2a3e; padding: 2px 8px; border-radius: 999px;
-}
-
-/* Stat grid */
-.ship .grid {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-  align-items: center;
-}
-
-/* Badges */
-.badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: #0f1723; padding: 4px 8px; border-radius: 999px;
-  border: 1px solid #1e2a38; color: var(--text);
-}
-.icon { font-weight: 800; }
-
-/* Sections */
-.hull, .engine, .weapons { display: flex; align-items: center; gap: 8px; }
-.engine { justify-self: end; }
-.hull .badge { background: #111b2a; }
-.weapons .badge { white-space: nowrap; }
-
-/* Shield strip — smaller & readable */
-.shieldBox { display: flex; align-items: center; }
-.shieldArc {
-  font-size: 12px;
-  color: var(--text);
-  opacity: .9;
-}
-.shieldArc.inactive { opacity: .55; text-decoration: line-through; }
-
-/* Status chips */
-.flag, .reflect, .jokered {
-  position: absolute; top: 6px; right: 8px;
-  font-size: 11px; padding: 3px 8px; border-radius: 999px;
-  background: #212a3b; border: 1px solid #2a3750; color: var(--text);
-}
-.reflect { right: 86px; }
-.jokered { right: 154px; }
-
-/* Damage display */
-.dmg {
-  margin-top: 8px; font-weight: 800; font-size: 18px;
-  display: flex; align-items: center; gap: 8px;
-}
-.dmg .missile {
-  width: 18px; height: 18px; border-radius: 3px;
-  background: linear-gradient(90deg, #ff9662, #ffd56b);
-  box-shadow: 0 0 6px rgba(255, 197, 102, .35);
-}
-
-/* ---------- Hand ---------- */
-#hand {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
-  gap: 8px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px;
-}
-
-.card {
-  background: #0f1420;
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 10px;
-  text-align: center;
-  padding: 6px 4px;
-  min-height: 44px;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  letter-spacing: .2px;
-}
-.card.sel { outline: 2px solid var(--accent); outline-offset: 2px; }
-.card.disabled { opacity: .55; pointer-events: none; }
-
-/* Suit tint (subtle) */
-.card.c { color: #76c4ff; }  /* Clubs */
-.card.h { color: #ff8c95; }  /* Hearts */
-.card.d { color: #93eaff; }  /* Diamonds */
-.card.s { color: #d2b7ff; }  /* Spades */
-
-/* ---------- Log ---------- */
-#log {
-  max-height: 240px; overflow: auto;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px;
-  font-size: 14px;
-}
-#log .good { color: var(--good); }
-#log .bad  { color: var(--bad); }
-#log .warn { color: var(--warn); }
-#log .muted { color: var(--muted); }
-
-/* ---------- Mobile polish ---------- */
-@supports (padding: max(0px)) {
-  #app { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
-}
-
-@media (max-width: 600px) {
-  .ships { grid-template-columns: 1fr; }
-  .ship .grid { grid-template-columns: 1fr 1fr; }
-  .reflect { top: auto; bottom: 6px; right: 8px; }
-  .jokered { top: auto; bottom: 6px; right: 86px; }
-  #controlsCol { padding: 10px; }
-}
-
-/* ---------- Tiny helpers for your current markup ---------- */
-/* Make first button row scrollable (use this class on the container if desired) */
-#controlsCol > div:nth-child(2) { display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-#controlsCol > div:nth-child(2)::-webkit-scrollbar { display: none; }
-
-/* Second row (AI toggle + difficulty) nicely aligned */
-#controlsCol > div:nth-child(3) { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.highlightTarget{outline:2px solid var(--accent)}
+.dim{opacity:.45}
