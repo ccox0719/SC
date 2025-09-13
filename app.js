@@ -1,11 +1,12 @@
-/* FILE_ID: SFB/app v1.0.0 */
+/* FILE_ID: SFB/app v1.1.0 */
 import { ID, CLASSN, QS } from "./ids.js";
 
 /*==========================================================
-  Space Fleet Battle — Clean Restart (single-file engine+UI)
+  Space Fleet Battle — Engine + UI (Starting Lineup enabled)
   - Full rules engine
   - Hotseat 2P + optional AI (Easy)
   - Undo, New Game, Deck-out
+  - Starting Lineup (ships & Ace guarantee) per your setup
 ==========================================================*/
 
 const SUITS = ["♣","♥","♦","♠"];
@@ -75,6 +76,14 @@ function isRoyalSpade(c){ return c.s==="♠" && ["J","Q","K"].includes(c.r); }
 function isAce(c){ return SUITS.includes(c.s) && c.r==="A"; }
 function isJoker(c){ return c.r==="Joker"; }
 
+/* Pull a specific card from the deck (by suit & rank) */
+function takeFromDeck(suit, rank){
+  const i = S.deck.findIndex(c => c.s===suit && c.r===rank);
+  if(i===-1) throw new Error(`Card ${rank}${suit} not found in deck during setup.`);
+  const [card] = S.deck.splice(i,1);
+  return card;
+}
+
 /* -----------------------
    Ships / Stacks / Effects
 ------------------------*/
@@ -104,13 +113,15 @@ function stackValue(cards){
 
 function recalcShip(ship){
   ship.stats.engine = stackValue(ship.stacks.clubs);
+
   const prevHullMax = ship.stats.hullMax;
   ship.stats.hullMax = stackValue(ship.stacks.hearts);
   if(prevHullMax===0 && ship.stats.hullMax>0){
-    ship.stats.hull = ship.stats.hullMax;
+    ship.stats.hull = ship.stats.hullMax; // initial set equals max
   }else{
     ship.stats.hull = Math.min(ship.stats.hull, ship.stats.hullMax);
   }
+
   ship.stats.shield = stackValue(ship.stacks.diamonds);
 
   const weps = ship.stacks.spades.filter(isWeaponCard);
@@ -213,11 +224,53 @@ function undo(){
 }
 
 /* -----------------------
-   Setup / New Game
+   Setup / New Game (with Starting Lineup + Ace guarantee)
 ------------------------*/
+function ensureAceInHand(pid){
+  const hand = S.players[pid].hand;
+  const hasAce = hand.some(isAce);
+  if(hasAce) return;
+
+  // find an Ace in deck
+  const aceIdx = S.deck.findIndex(c => isAce(c));
+  if(aceIdx === -1){
+    // Extremely unlikely: if all Aces are gone, do nothing gracefully
+    log(`${S.players[pid].name} could not be guaranteed an Ace (none left in deck).`);
+    return;
+  }
+  const [ace] = S.deck.splice(aceIdx,1);
+
+  // swap: put a random non-Ace from hand back into deck and add the Ace
+  let swapIdx = hand.findIndex(c => !isAce(c));
+  if(swapIdx === -1) swapIdx = 0; // fallback
+  const [giveBack] = hand.splice(swapIdx,1);
+  hand.push(ace);
+  S.deck.push(giveBack);
+  shuffle(S.deck);
+}
+
+function createStartingShip(name, parts){
+  const ship = newShip(name);
+  // parts: { clubs: [ranks...], hearts: [...], diamonds: [...] }
+  (parts.clubs||[]).forEach(r => ship.stacks.clubs.push( takeFromDeck("♣", String(r)) ));
+  (parts.hearts||[]).forEach(r => ship.stacks.hearts.push( takeFromDeck("♥", String(r)) ));
+  (parts.diamonds||[]).forEach(r => ship.stacks.diamonds.push( takeFromDeck("♦", String(r)) ));
+  recalcShip(ship);
+  // activate shield now if any
+  if(ship.stats.shield > 0){
+    ship.shieldActive = true;
+    ship.shieldCooldown = 0;
+  }
+  return ship;
+}
+
 function dealHands(){
+  // Deal P1:7, P2:6 (after removing starting ship cards)
   draw(0,7);
   draw(1,6);
+  // Guarantee one Ace for each (swap from deck if needed)
+  ensureAceInHand(0);
+  ensureAceInHand(1);
 }
 
 function startGame(){
@@ -237,9 +290,19 @@ function startGame(){
   S.history.length = 0;
   S.flags.deckOutChecked = false;
 
+  // --- Starting Lineup (consume exact cards from the deck first) ---
+  // Player 1
+  const p1A = createStartingShip("P1-Ship A", { clubs:[3], hearts:[2], diamonds:[2] });
+  const p1B = createStartingShip("P1-Ship B", { clubs:[4], hearts:[5] }); // no shield
+  S.players[0].ships.push(p1A, p1B);
+
+  // Player 2
+  const p2A = createStartingShip("P2-Ship A", { clubs:[2], hearts:[3], diamonds:[3] });
+  const p2B = createStartingShip("P2-Ship B", { clubs:[5], hearts:[4] }); // no shield
+  S.players[1].ships.push(p2A, p2B);
+
+  // --- Now deal hands and guarantee an Ace for each side ---
   dealHands();
-  S.players[0].ships.push(newShip("P1-Alpha"), newShip("P1-Beta"));
-  S.players[1].ships.push(newShip("P2-Alpha"), newShip("P2-Beta"));
 
   render();
 }
@@ -572,6 +635,7 @@ function render(){
   const p0H = G(ID.p0Hand); p0H.innerHTML="";
   S.players[0].hand.forEach((c,i)=>p0H.appendChild(cardNode(c,0,i)));
   const p1H = G(ID.p1Hand); p1H.innerHTML="";
+  // Keep P2 hand hidden in hotseat
   S.players[1].hand.forEach((c,i)=>{
     const n = cardNode({s:"?",r:"?"},1,i);
     n.textContent = "🂠";
