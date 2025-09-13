@@ -1,0 +1,30 @@
+{
+  "FILE_ID": "SFB/manifest",
+  "version": "1.0.0",
+  "files": {
+    "index.html": {
+      "id": "SFB/html",
+      "minVersion": "1.0.0"
+    },
+    "style.css": {
+      "id": "SFB/css",
+      "minVersion": "1.0.0"
+    },
+    "app.js": {
+      "id": "SFB/app",
+      "minVersion": "1.0.0"
+    },
+    "ids.js": {
+      "id": "SFB/ids",
+      "minVersion": "1.0.0"
+    },
+    "dom-check.js": {
+      "id": "SFB/domcheck",
+      "minVersion": "1.0.0"
+    },
+    "instructions.md": {
+      "id": "SFB/instructions",
+      "minVersion": "1.0.0"
+    }
+  }
+}

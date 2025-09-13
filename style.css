@@ -1,0 +1,96 @@
+/* FILE_ID: SFB/css v1.0.0 */
+:root{
+  --bg:#0b0f19;
+  --panel:#121826;
+  --ink:#e6ebff;
+  --muted:#9fb1ff;
+  --accent:#5aa9ff;
+  --danger:#ff6b6b;
+  --ok:#17c964;
+  --card:#0f1523;
+  --chip:#1b2340;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+
+header{padding:12px 16px;border-bottom:1px solid #1c2542;background:linear-gradient(180deg,#0d1424,#0b0f19)}
+h1{margin:0 0 8px 0;font-size:20px;letter-spacing:.5px}
+#turnBanner{display:flex;gap:12px;align-items:center;color:var(--muted);font-size:13px}
+#topControls{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+
+button{
+  background:var(--chip);color:var(--ink);border:1px solid #28345d;
+  padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:600
+}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--accent);color:#001332;border:none}
+
+main{display:grid;grid-template-columns:1fr 340px;gap:16px;padding:16px}
+@media (max-width: 980px){ main{grid-template-columns:1fr} #actions{order:-1} }
+
+#players{display:grid;gap:16px}
+.playerZone{background:var(--panel);padding:12px;border:1px solid #1c2542;border-radius:12px}
+.playerZone h2{margin:0 0 8px 0;color:var(--muted);font-weight:600;font-size:14px}
+
+.ships{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.hand{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+
+.cardlike{
+  background:var(--card);
+  border:1px solid #1c2542;border-radius:12px;padding:10px;
+  box-shadow:0 2px 8px rgba(0,0,0,.25)
+}
+
+.card{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:44px;height:56px;border-radius:8px;border:1px solid #31406f;
+  background:linear-gradient(180deg,#0f1830,#0d1424);
+  font-weight:700;user-select:none
+}
+.card.s-♣{color:#8ae66e}
+.card.s-♥{color:#ff9bb3}
+.card.s-♦{color:#7fd1ff}
+.card.s-♠{color:#c3b6ff}
+.card.A{border-color:#ffd86b;box-shadow:inset 0 0 0 1px #ffd86b}
+.card.royal{border-color:#ff9f6b}
+
+.card.selected{outline:2px solid var(--accent)}
+.card.invalid{opacity:.4;filter:grayscale(1)}
+.card.clickable{cursor:pointer}
+.card.small{height:46px;min-width:38px;font-size:14px}
+
+#actions{background:var(--panel);padding:12px;border:1px solid #1c2542;border-radius:12px}
+.actionRow{display:flex;gap:6px;flex-wrap:wrap}
+#context{margin-top:10px}
+#hint{min-height:20px;color:var(--muted);font-size:13px}
+.hidden{display:none}
+
+#pendingLaunch{display:flex;align-items:center;gap:8px;background:#0e1831;border:1px dashed #29407a;padding:8px;border-radius:8px}
+
+#log{margin-top:12px;max-height:40vh;overflow:auto;background:#0e1322;border:1px solid #1c2542;border-radius:8px;padding:8px;font-size:12px;line-height:1.35}
+#log .entry{padding:4px 0;border-bottom:1px dashed #2a355c}
+#log .entry:last-child{border-bottom:none}
+
+.ship{position:relative}
+.shipHeader{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.ship .flagship{display:none;color:#ffd86b}
+.ship.flag .flagship{display:inline}
+.ship .name{color:#a9b7ff;font-weight:700}
+
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.stat{background:#0f1730;border:1px solid #24356a;border-radius:8px;padding:6px;font-weight:700}
+.stat .val{float:right}
+.stat.hull{border-color:#4e2a3a}
+.stat.engine{border-color:#2d4e2a}
+.stat.shield{border-color:#234b62}
+.stat.weapon{border-color:#4b3b62}
+.stat .down{color:var(--danger)}
+.stat .up{color:var(--ok)}
+#shieldState{margin-left:6px;font-size:11px;color:#9cc9ff}
+
+.tags{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+.tag{background:#162043;border:1px solid #2b3e7d;color:#c0d3ff;font-size:11px;padding:2px 6px;border-radius:999px}
+
+.highlightTarget{outline:2px solid var(--accent)}
+.dim{opacity:.45}

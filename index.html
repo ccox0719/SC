@@ -1,9 +1,11 @@
+<!-- FILE_ID: SFB/html v1.0.0 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Space Fleet Battle</title>
+  <meta name="sfb:file-id" content="SFB/html" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -84,6 +86,11 @@
     </div>
   </template>
 
-  <script src="app.js"></script>
+  <!-- Verify DOM first, then load the app -->
+  <script type="module">
+    import { verifyDOM } from './dom-check.js';
+    verifyDOM();
+    await import('./app.js');
+  </script>
 </body>
 </html>
