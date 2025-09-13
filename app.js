@@ -1,4 +1,4 @@
-/* FILE_ID: SFB/app v1.1.0 */
+/* FILE_ID: SFB/app v1.1.1 */
 import { ID, CLASSN, QS } from "./ids.js";
 
 /*==========================================================
@@ -6,7 +6,9 @@ import { ID, CLASSN, QS } from "./ids.js";
   - Full rules engine
   - Hotseat 2P + optional AI (Easy)
   - Undo, New Game, Deck-out
-  - Starting Lineup (ships & Ace guarantee) per your setup
+  - Starting Lineup (ships & Ace guarantee)
+  - Shield cooldown = 2 turns
+  - Default action = Build
 ==========================================================*/
 
 const SUITS = ["♣","♥","♦","♠"];
@@ -32,7 +34,7 @@ const S = {
   history: [],
   ui:{
     selectedCard:null,  // {owner:0|1, idx}
-    mode:null,          // "build"|"attack"|"crown"|"special"|"launch"
+    mode:"build",       // default action is Build
     pendingLaunch:{clubs:null, hearts:null},
     highlight:{ships:[], foeShips:[]}
   },
@@ -181,7 +183,6 @@ function draw(pid, n=1){
 
 function nextTurn(){
   S.turn = (S.turn+1) % 2;
-  S.ui.mode = null;
   S.ui.selectedCard = null;
   S.ui.pendingLaunch = {clubs:null, hearts:null};
   S.ui.highlight = {ships:[], foeShips:[]};
@@ -194,6 +195,10 @@ function nextTurn(){
   } else {
     draw(S.turn,1);
   }
+
+  // Default action each turn: Build
+  S.ui.mode = "build";
+  hint("Select a card to install, or use other actions.");
 
   checkDeckOutWin();
   render();
@@ -234,7 +239,6 @@ function ensureAceInHand(pid){
   // find an Ace in deck
   const aceIdx = S.deck.findIndex(c => isAce(c));
   if(aceIdx === -1){
-    // Extremely unlikely: if all Aces are gone, do nothing gracefully
     log(`${S.players[pid].name} could not be guaranteed an Ace (none left in deck).`);
     return;
   }
@@ -304,6 +308,10 @@ function startGame(){
   // --- Now deal hands and guarantee an Ace for each side ---
   dealHands();
 
+  // Default action at game start: Build
+  S.ui.mode = "build";
+  hint("Select a card to install, or use other actions.");
+
   render();
 }
 
@@ -353,7 +361,7 @@ function beginLaunch(){
 function cancelLaunch(){
   S.ui.pendingLaunch = {clubs:null, hearts:null};
   G(ID.pendingLaunch).classList.add(CLASSN.hidden);
-  S.ui.mode = null;
+  S.ui.mode = "build"; // fall back to default action
   render();
 }
 
@@ -405,7 +413,7 @@ function performAttack(attackerIdx, defenderPid, defenderIdx){
     const absorb = Math.min(target.stats.shield, remaining);
     remaining -= absorb;
     target.shieldActive = false;
-    target.shieldCooldown = 1;
+    target.shieldCooldown = 2; // cooldown is now 2 of defender's own turns
   }
 
   if(remaining>0){
@@ -519,7 +527,7 @@ function performSpecial(cardIdx, targetPid, targetShipIdx, ownShipIdxForQ){
 
 /* Called after any single action has succeeded */
 function finishAction(){
-  S.ui.mode = null;
+  S.ui.mode = "build"; // return to default action
   render();
   G(ID.btnEnd).disabled = false;
   G(ID.btnBuild).disabled = true;
