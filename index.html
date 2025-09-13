@@ -1,52 +1,89 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Space Fleet Battle</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- keep your existing stylesheet link(s) here -->
-  <link rel="stylesheet" href="styles.css" />
+  <title>Space Fleet Battle</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
-  <!-- Controls / HUD (IDs used by app.js) -->
-  <div id="controlsCol">
-    <div id="turnPill">Turn: <span class="p1">Player 1</span></div>
-
-    <div>
-      <button id="btnBuild">Build</button>
-      <button id="btnAttack">Attack</button>
-      <button id="btnCrown">Play Ace (Crown)</button>
-      <button id="btnUndo">Undo</button>
-      <button id="btnEndTurn">End Turn</button>
-      <button id="btnNewGame">New Game</button>
-      <!-- JS will toggle visibility during launch_pair -->
-      <button id="btnConfirmLaunch" style="display:none">Confirm Launch</button>
+  <header>
+    <h1>Space Fleet Battle</h1>
+    <div id="turnBanner">
+      <span id="playerTurn"></span>
+      <span id="phase"></span>
+      <span id="deckCount"></span>
     </div>
-
-    <div>
-      <label><input type="checkbox" id="aiToggle" checked> AI controls Player 2</label>
-      <label>Difficulty
-        <select id="aiDifficulty">
-          <option value="easy">Easy</option>
-          <option value="normal" selected>Normal</option>
-          <option value="hard">Hard</option>
-        </select>
+    <div id="topControls">
+      <button id="btnNew">New Game</button>
+      <button id="btnUndo" disabled>Undo</button>
+      <label class="aiToggle">
+        <input type="checkbox" id="aiEnabled" />
+        vs AI (P2)
       </label>
+      <select id="aiLevel">
+        <option value="easy" selected>Easy</option>
+        <option value="normal">Normal</option>
+        <option value="hard">Hard</option>
+      </select>
     </div>
+  </header>
 
-    <div>Deck: <span id="deckCount">0</span> • Your hand: <span id="handCount">0</span></div>
-    <div id="actionHint">Select an action.</div>
-    <div>Selected:</div>
-    <div id="selectedInfo">—</div>
-  </div>
+  <main>
+    <section id="players">
+      <div class="playerZone" id="p0Zone">
+        <h2>Player 1</h2>
+        <div class="ships" id="p0Ships"></div>
+        <div class="hand" id="p0Hand"></div>
+      </div>
 
-  <!-- Board / Hand / Log (IDs used by app.js) -->
-  <div id="board"></div>
-  <div id="hand"></div>
-  <div id="log"></div>
+      <div class="playerZone" id="p1Zone">
+        <h2>Player 2</h2>
+        <div class="ships" id="p1Ships"></div>
+        <div class="hand" id="p1Hand"></div>
+      </div>
+    </section>
 
-  <!-- Your game logic -->
+    <aside id="actions">
+      <div class="actionRow">
+        <button id="btnBuild" disabled>Build / Install</button>
+        <button id="btnLaunch" disabled>Launch (♣+♥)</button>
+        <button id="btnAttack" disabled>Attack</button>
+        <button id="btnCrown" disabled>Crown (Ace)</button>
+        <button id="btnSpecial" disabled>Play Special</button>
+        <button id="btnEnd" disabled>End Turn</button>
+      </div>
+
+      <div id="context">
+        <div id="hint"></div>
+        <div id="pendingLaunch" class="hidden">
+          <strong>Pending Launch:</strong>
+          <span id="launchClubs"></span> + <span id="launchHearts"></span>
+          <button id="btnConfirmLaunch">Confirm</button>
+          <button id="btnCancelLaunch">Cancel</button>
+        </div>
+      </div>
+
+      <div id="log"></div>
+    </aside>
+  </main>
+
+  <template id="shipTpl">
+    <div class="ship cardlike">
+      <div class="shipHeader">
+        <span class="flagship" title="Flagship">★</span>
+        <span class="name"></span>
+      </div>
+      <div class="stats">
+        <div class="stat hull" title="Hull (♥)">♥ <span class="val hullVal"></span></div>
+        <div class="stat engine" title="Engine (♣)">♣ <span class="val engVal"></span></div>
+        <div class="stat shield" title="Shield (♦)">♦ <span class="val shVal"></span> <span class="status" id="shieldState"></span></div>
+        <div class="stat weapon" title="Weapons (♠)">♠ <span class="val wepVal"></span></div>
+      </div>
+      <div class="tags"></div>
+    </div>
+  </template>
+
   <script src="app.js"></script>
 </body>
 </html>
